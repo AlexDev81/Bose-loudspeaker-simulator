@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bose Coverage Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --bg:#0f0f0f;--s1:#161616;--s2:#1e1e1e;--s3:#242424;
+  --border:#2a2a2a;--text:#e2e2e2;--muted:#555;--dim:#333;
+  --accent:#c8a96e;--a2:#7eb8c8;--ok:#7ec896;--err:#c87e7e;--warn:#e8b060;
+  --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px}
+input,select,button{font-family:var(--mono);font-size:11px}
+input[type=number],select{background:var(--s2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:3px;width:100%;outline:none}
+input[type=number]:focus,select:focus{border-color:var(--accent)}
+label{font-size:9px;color:var(--muted);letter-spacing:.08em;display:block;margin-bottom:3px}
+.app{display:grid;grid-template-columns:248px 1fr 282px;grid-template-rows:44px 1fr;height:100vh}
+.hdr{grid-column:1/-1;background:var(--s1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:10px}
+.hdr-title{font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--accent);font-family:var(--mono)}
+.hdr-sep{color:var(--border);font-size:18px;margin:0 2px}
+.hdr-sub{font-size:9px;color:var(--muted);font-family:var(--mono)}
+.hdr-r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.left,.right{background:var(--s1);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+.left{border-right:1px solid var(--border)}
+.right{border-left:1px solid var(--border)}
+.canvas-area{background:#0a0a0a;position:relative;overflow:hidden}
+#cv{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+.sec{display:flex;flex-direction:column;gap:6px}
+.lbl{font-size:9px;font-family:var(--mono);letter-spacing:.14em;color:var(--muted);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:2px}
+.row{display:flex;gap:6px}
+.field{flex:1;display:flex;flex-direction:column}
+.btn{padding:5px 10px;border-radius:3px;border:1px solid var(--border);background:var(--s2);color:var(--text);cursor:pointer;transition:all .12s;font-family:var(--mono);font-size:10px;letter-spacing:.04em;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.danger{border-color:var(--err);color:var(--err)}
+.modebar{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:2px;background:rgba(10,10,10,.95);border:1px solid var(--border);border-radius:4px;padding:3px;z-index:20}
+.mb{padding:4px 10px;border:none;background:transparent;color:var(--muted);font-family:var(--mono);font-size:9px;letter-spacing:.07em;cursor:pointer;border-radius:2px;transition:all .12s}
+.mb:hover{color:var(--text)}
+.mb.on{background:var(--accent);color:#0f0f0f;font-weight:600}
+.hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);color:var(--muted);font-size:9px;font-family:var(--mono);padding:4px 14px;border-radius:2px;pointer-events:none;white-space:nowrap;z-index:10;border:1px solid var(--border)}
+.card{background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:10px}
+.card-row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.card-name{font-size:12px;font-weight:500}
+.card-specs{font-size:9px;font-family:var(--mono);color:var(--muted);line-height:1.8}
+.place-btn{width:100%;padding:9px;background:var(--accent);color:#0f0f0f;border:none;border-radius:4px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.08em;transition:all .14s}
+.place-btn:hover{background:#d4b87a}
+.zone-item,.spk-row{background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:9px;margin-bottom:4px}
+.spk-row.sel{border-color:var(--accent)}
+.rec-box{background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:6px}
+.badge{display:inline-block;font-size:8px;font-family:var(--mono);padding:2px 6px;border-radius:2px;background:rgba(200,169,110,.12);color:var(--accent);margin-bottom:4px;letter-spacing:.06em}
+.rec-name{font-size:12px;font-weight:500;margin-bottom:3px}
+.rec-desc{font-size:10px;color:var(--muted);line-height:1.5}
+.rec-meta{font-size:9px;font-family:var(--mono);color:var(--dim);margin-top:4px}
+.sg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:5px}
+.sc{background:rgba(0,0,0,.3);border-radius:3px;padding:5px 6px;text-align:center}
+.sv{font-family:var(--mono);font-size:13px;font-weight:500}
+.sl{font-size:8px;color:var(--muted);margin-top:1px}
+.leg{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--muted);padding:2px 0}
+.ls{width:20px;height:7px;border-radius:1px;flex-shrink:0}
+.empty{font-size:10px;color:var(--muted);font-family:var(--mono)}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="hdr">
+  <span class="hdr-title">BOSE COVERAGE SIMULATOR</span>
+  <span class="hdr-sep">|</span>
+  <span class="hdr-sub">Multi-sone · dB-visualisering</span>
+  <div class="hdr-r">
+    <button class="btn" id="uploadBtn">Last opp PNG / JPG / PDF</button>
+    <input type="file" id="fi" accept="image/*,.pdf,application/pdf" style="display:none">
+    <span id="fStat" style="font-size:9px;color:var(--muted);font-family:var(--mono);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <button class="btn" onclick="doExport()">Eksporter</button>
+    <button class="btn danger" id="resetBtn" onclick="doReset()">Nullstill</button>
+  </div>
+</header>
+
+<!-- LEFT -->
+<div class="left">
+
+  <div class="sec">
+    <div class="lbl">Rom</div>
+    <div class="row">
+      <div class="field"><label>BREDDE m</label><input type="number" id="rW" value="20" min="2" max="300" step="0.5" onchange="redraw()"></div>
+      <div class="field"><label>DYBDE m</label><input type="number" id="rL" value="15" min="2" max="300" step="0.5" onchange="redraw()"></div>
+      <div class="field"><label>TAK m</label><input type="number" id="rH" value="2.7" min="1.5" max="20" step="0.1" onchange="onRhChange()"></div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>SYSTEM</label>
+        <select id="sysVolt" onchange="onSettingChange()">
+          <option value="100">100V (standard)</option>
+          <option value="70">70V</option>
+          <option value="8ohm">8 ohm</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>BRUKSOMRÅDE</label>
+        <select id="spaceType" onchange="onSpaceChange()">
+          <option value="office">Fellesområde / åpent landskap</option>
+          <option value="meeting">Møterom</option>
+          <option value="auditorium">Auditorium</option>
+        </select>
+      </div>
+    </div>
+    <div id="spaceNote" style="display:none;font-size:9px;line-height:1.5;margin-top:2px;padding:6px 8px;background:var(--s2);border-radius:3px;border-left:2px solid var(--warn)"></div>
+  </div>
+
+  <div class="sec">
+    <div class="lbl">Kalibrering</div>
+    <div id="cStat" style="font-size:9px;font-family:var(--mono);color:var(--muted);min-height:14px"></div>
+    <div class="row">
+      <button class="btn" id="calibBtn" onclick="startCalib()" style="flex:1">📐 Start kalibrering</button>
+      <button class="btn danger" onclick="resetCalib()">Nullstill</button>
+    </div>
+    <!-- Calibration input panel - shown after B point is clicked -->
+    <div id="calibInputs" style="display:none;background:var(--s2);border:1px solid var(--accent);border-radius:4px;padding:10px;margin-top:4px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--accent);margin-bottom:8px;letter-spacing:.08em">OPPGI MÅL</div>
+      <div class="field" style="margin-bottom:6px">
+        <label>AVSTAND A→B i meter</label>
+        <input type="number" id="calibDist" min="0.1" max="500" step="0.01" placeholder="f.eks. 7.17">
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <div class="field">
+          <label>ROMBREDDE m</label>
+          <input type="number" id="calibRW" min="1" max="500" step="0.1">
+        </div>
+        <div class="field">
+          <label>ROMDYBDE m</label>
+          <input type="number" id="calibRL" min="1" max="500" step="0.1">
+        </div>
+      </div>
+      <div id="calibErr" style="display:none;font-size:9px;color:var(--err);font-family:var(--mono);margin-bottom:5px;padding:4px 6px;background:rgba(200,126,126,.1);border-radius:3px"></div>
+      <div class="row" style="gap:6px">
+        <button class="btn" onclick="confirmCalib()" style="flex:1;background:var(--accent);color:#0f0f0f;border-color:var(--accent);font-weight:600">✓ Bekreft</button>
+        <button class="btn danger" onclick="cancelCalib()">Avbryt</button>
+      </div>
+    </div>
+    <div id="calibSteps" style="font-size:9px;color:var(--muted);line-height:1.65;margin-top:4px">
+      1. Klikk <strong style="color:var(--text)">Start kalibrering</strong><br>
+      2. Klikk punkt <strong style="color:var(--accent)">A</strong> på plantegningen<br>
+      3. Klikk punkt <strong style="color:var(--accent)">B</strong> — oppgi mål<br>
+      <span style="color:var(--warn)">💡 PDF krever internett. Bruk PNG/JPG offline</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="lbl">Velg høyttaler</div>
+    <div class="field">
+      <label>KATEGORI</label>
+      <select id="spkCat" onchange="onCatChange()">
+        <option value="c_dm">Takinnfelt — DesignMax</option>
+        <option value="c_em">Takinnfelt — EdgeMax</option>
+        <option value="c_fs">Takinnfelt — FreeSpace</option>
+        <option value="surface">Veggmontert</option>
+        <option value="pendant">Pendel</option>
+        <option value="sub">Subwoofer</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>MODELL</label>
+      <select id="spkModel" onchange="onModelChange()">
+        <option value="">— velg modell —</option>
+      </select>
+    </div>
+    <div id="spkCard" style="display:none" class="card">
+      <div class="card-row">
+        <div class="dot" id="cDot"></div>
+        <div class="card-name" id="cName"></div>
+      </div>
+      <div class="card-specs" id="cSpecs"></div>
+    </div>
+    <button class="place-btn" id="placeBtn" style="display:none" onclick="activatePlace()">+ Plasser i rom</button>
+    <div id="placeHint" style="font-size:9px;color:var(--muted);text-align:center;font-family:var(--mono);padding:4px 0">Velg modell ovenfor</div>
+  </div>
+
+</div>
+
+<!-- CANVAS -->
+<div class="canvas-area" id="cWrap">
+  <canvas id="cv"></canvas>
+  <div class="modebar">
+    <button class="mb on" id="mPlace" onclick="setMode('place')">PLASSER</button>
+    <button class="mb" id="mZone"  onclick="setMode('zone')">TEGN SONE</button>
+    <button class="mb" id="mMove"  onclick="setMode('move')">FLYTT</button>
+    <button class="mb" id="mPan"   onclick="setMode('pan')">PAN</button>
+    <button class="mb" id="mCalib" onclick="startCalib()">KALIBRER</button>
+  </div>
+  <div class="hint" id="hintBar">Velg høyttaler til venstre, klikk for å plassere</div>
+</div>
+
+<!-- RIGHT -->
+<div class="right">
+  <div class="sec">
+    <div class="lbl">Soner</div>
+    <div id="zList"><span class="empty">Ingen soner — bruk «TEGN SONE»</span></div>
+    <button onclick="addZone()" style="width:100%;padding:6px;background:transparent;border:1px dashed var(--border);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:9px;cursor:pointer;margin-top:2px">+ Legg til sone manuelt</button>
+  </div>
+  <div class="sec">
+    <div class="lbl">Plasserte høyttalere</div>
+    <div id="sList"><span class="empty">Ingen plassert ennå</span></div>
+  </div>
+  <div class="sec">
+    <div class="lbl">Fargeforklaring</div>
+    <div class="leg"><div class="ls" style="background:rgba(200,80,80,.75)"></div>Overlapp / +3 dB</div>
+    <div class="leg"><div class="ls" style="background:rgba(100,200,90,.7)"></div>God dekning 0 dB</div>
+    <div class="leg"><div class="ls" style="background:rgba(90,150,230,.55)"></div>Kant −3 dB</div>
+    <div class="leg"><div class="ls" style="background:rgba(80,80,120,.45)"></div>Svak −6 dB</div>
+    <div class="leg"><div class="ls" style="background:rgba(200,60,60,.15);border:1px dashed rgba(200,100,100,.3)"></div>Dødpunkt</div>
+  </div>
+  <div class="sec">
+    <div class="lbl">Forsterker · Prosessor · Soner</div>
+    <div id="recList"><span class="empty">Plasser høyttalere for anbefaling</span></div>
+  </div>
+</div>
+
+</div>
+<script>
+// ══ VERIFIED BOSE DATA — boseprofessional.com TDS 2020-2025 ══════════════════
+const SPK={
+  DM2C:{name:'DM2C-LP', ang:150,pwr:20, sens:84,color:'#7eb8c8',range:3.0,mount:'ceiling',taps70:[1.5,3,6],taps100:[2.3,4.5,9],note:'150° · 20W · 84dB · TDS 09/2020'},
+  DM3C:{name:'DM3C',    ang:135,pwr:30, sens:83,color:'#7eb8c8',range:4.0,mount:'ceiling',taps70:[3,6,12,25],taps100:[6,12,25],note:'135° · 30W · 83dB · TDS 09/2020'},
+  DM5C:{name:'DM5C',    ang:130,pwr:60, sens:87,color:'#7eb8c8',range:5.5,mount:'ceiling',taps70:[3,6,12,25,50],taps100:[6,12,25,50],note:'130° · 60W · 87dB · TDS 12/2025'},
+  DM6C:{name:'DM6C',    ang:120,pwr:125,sens:88,color:'#7eb8c8',range:6.5,mount:'ceiling',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'120° · 125W · 88dB · TDS 04/2023'},
+  DM8C:{name:'DM8C',    ang:135,pwr:150,sens:91,color:'#7eb8c8',range:8.0,mount:'ceiling',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'135° · 150W · 91dB · TDS 04/2023'},
+  EM90: {name:'EdgeMax EM90', ang:90, pwr:60, sens:89,color:'#c87e7e',range:6.0,mount:'edge',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'90° PhaseGuide · Hjørne'},
+  EM180:{name:'EdgeMax EM180',ang:180,pwr:60, sens:89,color:'#c87e7e',range:6.0,mount:'edge',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'180° PhaseGuide · Vegg/tak'},
+  FS3: {name:'DS16F (tak)',ang:140,pwr:16,sens:84,color:'#7ec896',range:3.5,mount:'ceiling',taps70:[1,2,4,8,16],taps100:[2,4,8,16],note:'140° · 16W · 84dB · Innfelt tak'},
+  FS3F:{name:'DS40F (tak)',ang:125,pwr:40,sens:87,color:'#7ec896',range:5.0,mount:'ceiling',taps70:[2.5,5,10,20,40],taps100:[2.5,5,10,20,40],note:'125° · 40W · 87dB · Innfelt tak'},
+  DM8CSUB: {name:'DM8C-SUB', ang:360,pwr:180,sens:89,color:'#888',range:0,mount:'sub',taps70:[20,40,80,150],taps100:[20,40,80,150],note:'Takinnfelt subwoofer · 180W · under 200Hz'},
+  DM10PSUB:{name:'DM10P-SUB',ang:360,pwr:300,sens:89,color:'#888',range:0,mount:'sub',taps70:[40,80,150,300],taps100:[40,80,150,300],note:'Pendel subwoofer · 300W · under 200Hz'},
+  DM5SE:{name:'DM5SE',ang:130,pwr:60, sens:90,color:'#b87ec8',range:6.0,mount:'wall',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'130° · 60W · 90dB · Innendørs'},
+  DM6SE:{name:'DM6SE',ang:125,pwr:125,sens:90,color:'#b87ec8',range:7.0,mount:'wall',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'125° · 125W · 90dB · IP55 utendørs'},
+  DM8S: {name:'DM8S', ang:130,pwr:150,sens:93,color:'#b87ec8',range:9.0,mount:'wall',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'130° · 150W · 93dB'},
+  DS16F: {name:'DS16F', ang:140,pwr:16, sens:84,color:'#c8a96e',range:4.0,mount:'wall',taps70:[1,2,4,8,16],taps100:[2,4,8,16],note:'140° · 16W · 84dB · Vegg'},
+  DS40F: {name:'DS40F', ang:125,pwr:40, sens:87,color:'#c8a96e',range:6.0,mount:'wall',taps70:[2.5,5,10,20,40],taps100:[2.5,5,10,20,40],note:'125° · 40W · 87dB · Vegg'},
+  DS100F:{name:'DS100F',ang:90, pwr:100,sens:90,color:'#c8a96e',range:8.0,mount:'wall',taps70:[5,10,20,40,80,100],taps100:[5,10,20,40,80,100],note:'90° · 100W · 90dB · Vegg'},
+  DM3P: {name:'DM3P', ang:135,pwr:30, sens:83,color:'#e8b060',range:4.0,mount:'pendant',taps70:[3,6,12,25],taps100:[6,12,25],note:'135° · 30W · 83dB · Pendel'},
+  DM5P: {name:'DM5P', ang:130,pwr:60, sens:87,color:'#e8b060',range:5.5,mount:'pendant',taps70:[3,6,12,25,50],taps100:[6,12,25,50],note:'130° · 60W · 87dB · Pendel'},
+  DM6PE:{name:'DM6PE',ang:120,pwr:125,sens:88,color:'#e8b060',range:6.5,mount:'pendant',taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'120° · 125W · 88dB · Pendel utendørs'},
+};
+const CATS={
+  c_dm:[
+    {id:'DM2C',lbl:'DM2C-LP  —  150° · 20W · 84dB  · Lavprofil'},
+    {id:'DM3C',lbl:'DM3C     —  135° · 30W · 83dB'},
+    {id:'DM5C',lbl:'DM5C  ★  —  130° · 60W · 87dB  (mest brukt)'},
+    {id:'DM6C',lbl:'DM6C     —  120° · 125W · 88dB'},
+    {id:'DM8C',lbl:'DM8C     —  135° · 150W · 91dB  · High SPL'},
+  ],
+  c_em:[
+    {id:'EM90', lbl:'EdgeMax EM90   —  90°  · 60W · Hjørne'},
+    {id:'EM180',lbl:'EdgeMax EM180  —  180° · 60W · Vegg/tak'},
+  ],
+  c_fs:[
+    {id:'FS3', lbl:'DS16F (innfelt)  —  140° · 16W · 84dB'},
+    {id:'FS3F',lbl:'DS40F (innfelt)  —  125° · 40W · 87dB'},
+  ],
+  surface:[
+    {id:'DM5SE', lbl:'DM5SE   —  130° · 60W  · 90dB  · Innendørs'},
+    {id:'DM6SE', lbl:'DM6SE   —  125° · 125W · 90dB  · IP55 utendørs'},
+    {id:'DM8S',  lbl:'DM8S    —  130° · 150W · 93dB'},
+    {id:'DS16F', lbl:'DS16F   —  140° · 16W  · 84dB  · Vegg'},
+    {id:'DS40F', lbl:'DS40F   —  125° · 40W  · 87dB  · Vegg'},
+    {id:'DS100F',lbl:'DS100F  —  90°  · 100W · 90dB  · Vegg'},
+  ],
+  pendant:[
+    {id:'DM3P', lbl:'DM3P    —  135° · 30W  · 83dB'},
+    {id:'DM5P', lbl:'DM5P    —  130° · 60W  · 87dB'},
+    {id:'DM6PE',lbl:'DM6PE   —  120° · 125W · 88dB  · Utendørs'},
+  ],
+  sub:[
+    {id:'DM8CSUB', lbl:'DM8C-SUB   —  Takinnfelt · 180W · under 200Hz'},
+    {id:'DM10PSUB',lbl:'DM10P-SUB  —  Pendel     · 300W · under 200Hz'},
+  ],
+};
+const AMPS=[
+  {name:'IZA 190-HZ',        totalW:90,  zones:1,desc:'1×90W · 70/100V · Enkel liten sone'},
+  {name:'IZA 2120-HZ',       totalW:240, zones:2,desc:'2×120W · 70/100V · Opptil 2 soner'},
+  {name:'IZA 4120-HZ',       totalW:480, zones:4,desc:'4×120W · 70/100V · Opptil 4 soner'},
+  {name:'PowerSpace P2600A', totalW:1200,zones:2,desc:'2×600W · AmpLink · Anbefalt for mellomstore kommersielle anlegg'},
+  {name:'PowerSpace P4300A', totalW:1200,zones:4,desc:'4×300W · AmpLink · 4 soner · 1200W total'},
+  {name:'PowerSpace+ P4300', totalW:1200,zones:4,desc:'4×300W · DSP innebygd · Rask oppsett via nettleser'},
+  {name:'PowerShare PS404D', totalW:400, zones:4,desc:'400W delt over 4 utganger · Dante · PowerShare'},
+  {name:'PowerShare PS604D', totalW:600, zones:4,desc:'600W delt over 4 utganger · Dante · Fleksibel fordeling'},
+  {name:'PowerShare PS802D', totalW:800, zones:8,desc:'800W delt over 8 utganger · Dante · Store anlegg'},
+];
+const PROCS=[
+  {name:'CSP-428',  ins:4, outs:4, conf:false,desc:'Fixed DSP · 4 inn/4 ut · Bakgrunnsmusikk og paging'},
+  {name:'CSP-1248', ins:12,outs:8, conf:false,desc:'Fixed DSP · 12 inn/8 ut · Multi-sone musikk'},
+  {name:'ESP-880A', ins:8, outs:8, conf:false,desc:'ControlSpace ESP-880A · 8 inn/8 ut · Anbefalt for kommersielle musikanlegg · AmpLink'},
+  {name:'EX-1280',  ins:12,outs:8, conf:false,desc:'ControlSpace EX-1280 · Open architecture DSP · Dante'},
+  {name:'EX-440C',  ins:4, outs:4, conf:true, desc:'ControlSpace EX-440C · 4 inn/4 ut · Konferanse med AEC · Møterom'},
+  {name:'EX-12AEC', ins:12,outs:4, conf:true, desc:'ControlSpace EX-12AEC · 12 inn/4 ut · Konferanse med AEC'},
+  {name:'EX-1280C', ins:12,outs:8, conf:true, desc:'ControlSpace EX-1280C · 12 inn/8 ut · Konferanse + Dante · Store hybridrom'},
+];
+const ZC=['#4a9eff','#ff6b6b','#51cf66','#ffd43b','#cc5de8','#ff922b','#20c997','#f06595'];
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+let speakers=[],zones=[],selModel=null,mode='place';
+let selSpk=null,dragSpk=null,dragOff={x:0,y:0};
+let panX=0,panY=0,panStart=null;
+let zDraw=false,zPt1=null,zPrev=null;
+let floorImg=null,fpxScale=null;
+let calPts=[],calLine=null;
+let zCount=0,sCount=0;
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),cWrap=document.getElementById('cWrap');
+const hint=t=>document.getElementById('hintBar').textContent=t;
+const getRW=()=>+document.getElementById('rW').value;
+const getRL=()=>+document.getElementById('rL').value;
+const getRH=()=>+document.getElementById('rH').value;
+const getSV=()=>document.getElementById('sysVolt').value;
+const getST=()=>document.getElementById('spaceType').value;
+const getScale=()=>{const p=44;return Math.min((cv.width-p*2)/getRW(),(cv.height-p*2)/getRL());};
+const getOff=()=>{const sc=getScale();return{x:(cv.width-getRW()*sc)/2+panX,y:(cv.height-getRL()*sc)/2+panY};};
+const r2c=(rx,ry)=>{const o=getOff(),sc=getScale();return{x:o.x+rx*sc,y:o.y+ry*sc};};
+const c2r=(cx,cy)=>{const o=getOff(),sc=getScale();return{x:(cx-o.x)/sc,y:(cy-o.y)/sc};};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const inZ=(rx,ry,z)=>rx>=z.x&&rx<=z.x+z.w&&ry>=z.y&&ry<=z.y+z.h;
+const cc=(p)=>p>85?'#7ec896':p>65?'#c8a96e':'#c87e7e';
+const isCeil=(sp)=>!sp.mount||sp.mount==='ceiling'||sp.mount==='pendant';
+const hx=(h)=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+function resize(){
+  const w=cWrap.clientWidth, h=cWrap.clientHeight;
+  if(w>0&&h>0){cv.width=w;cv.height=h;redraw();}
+}
+window.addEventListener('resize',resize);
+// Use RAF to ensure grid layout is complete before measuring
+function initResize(){
+  requestAnimationFrame(()=>{
+    resize();
+    if(cv.width===0) setTimeout(initResize, 100); // retry if layout not ready
+  });
+}
+initResize();
+
+// ── DROPDOWN ──────────────────────────────────────────────────────────────────
+function onCatChange(){
+  const cat=document.getElementById('spkCat').value;
+  const sel=document.getElementById('spkModel');
+  sel.innerHTML='<option value="">— velg modell —</option>'+CATS[cat].map(s=>'<option value="'+s.id+'">'+s.lbl+'</option>').join('');
+  showCard(null);
+  document.getElementById('placeBtn').style.display='none';
+  document.getElementById('placeHint').textContent='Velg modell ovenfor';
+}
+function onModelChange(){
+  const id=document.getElementById('spkModel').value;
+  if(!id){showCard(null);document.getElementById('placeBtn').style.display='none';return;}
+  showCard(id); selModel=id; setMode('place');
+  document.getElementById('placeBtn').style.display='block';
+  document.getElementById('placeHint').textContent='Klikk i rommet for å plassere';
+  hint(SPK[id].name+' valgt — klikk i rommet');
+}
+function showCard(id){
+  const card=document.getElementById('spkCard');
+  if(!id||!SPK[id]){card.style.display='none';return;}
+  const sp=SPK[id]; card.style.display='block';
+  document.getElementById('cDot').style.background=sp.color;
+  document.getElementById('cName').textContent=sp.name;
+  const effH=Math.max(getRH()-1.5,0.5);
+  const r=isCeil(sp)?(effH*Math.tan(sp.ang/2*Math.PI/180)).toFixed(1)+'m radius':sp.range+'m rekkevidde';
+  const volt=getSV(), taps=volt==='70'?(sp.taps70||[]):volt==='8ohm'?[sp.pwr]:(sp.taps100||[]);
+  const ts=taps.filter(t=>t<=sp.pwr).join(' / ')+'W';
+  document.getElementById('cSpecs').innerHTML=
+    (sp.mount==='sub'?'Subwoofer — ingen 2D-dekning<br>Effekt: '+sp.pwr+'W':
+      'Vinkel: '+sp.ang+'°&nbsp;&nbsp;Effekt: '+sp.pwr+'W&nbsp;&nbsp;Sens: '+sp.sens+'dB<br>')+
+    (sp.mount!=='sub'?'Radius @ 1.5m lyttehøyde: <strong style="color:var(--accent)">'+r+'</strong><br>':'')+
+    'Transformer-tap ('+volt+'): '+ts+'<br>'+
+    '<span style="color:var(--dim)">'+sp.note+'</span>';
+}
+function activatePlace(){if(selModel){setMode('place');hint(SPK[selModel].name+' — klikk i rommet');}}
+function onSpaceChange(){
+  const st=getST();
+  const note=document.getElementById('spaceNote');
+  if(st==='auditorium'){
+    note.style.display='block';
+    note.innerHTML='<span style="color:var(--warn)">⚠ Auditorium: angi korrekt takhøyde over bakkant sitteplasser. SPL-mål: 78 dB(A). Overlapp: 75%.</span>';
+  } else if(st==='office'){
+    note.style.display='block';
+    note.innerHTML='<span style="color:var(--muted)">Standard takhøyde 2.7m. SPL-mål: 75 dB(A).</span>';
+  } else {
+    note.style.display='none';
+  }
+  updateRecs();
+}
+function onRhChange(){showCard(selModel);redraw();}
+function onSettingChange(){showCard(selModel);updateRecs();}
+onCatChange();
+
+// ── MODES ──────────────────────────────────────────────────────────────────────
+function setMode(m){
+  mode=m;
+  ['Place','Zone','Move','Pan','Calib'].forEach(n=>{
+    const el=document.getElementById('m'+n);
+    if(el)el.classList.toggle('on',m===n.toLowerCase());
+  });
+  const mp={place:'Klikk i rommet for å plassere valgt høyttaler',zone:'Klikk og dra for å tegne lydsone',
+    move:'Dra høyttaler · Høyreklikk = pek mot punkt',pan:'Klikk og dra for å panorere',
+    calibrate:'Klikk punkt A → klikk punkt B → oppgi avstand i meter'};
+  if(mp[m])hint(mp[m]);
+}
+
+// ── CALIBRATION ───────────────────────────────────────────────────────────────
+function startCalib(){
+  calPts=[];calLine=null;
+  document.getElementById('calibInputs').style.display='none';
+  document.getElementById('calibSteps').style.display='block';
+  document.getElementById('calibBtn').textContent='📐 Klikk punkt A...';
+  document.getElementById('calibBtn').style.borderColor='var(--accent)';
+  setMode('calibrate');
+  hint('Klikk punkt A på plantegningen');
+}
+function resetCalib(){
+  calPts=[];calLine=null;fpxScale=null;
+  document.getElementById('cStat').textContent='';
+  document.getElementById('cStat').style.color='var(--muted)';
+  document.getElementById('calibInputs').style.display='none';
+  document.getElementById('calibSteps').style.display='block';
+  document.getElementById('calibBtn').textContent='📐 Start kalibrering';
+  document.getElementById('calibBtn').style.borderColor='';
+  setMode('place');
+  redraw();
+}
+function cancelCalib(){
+  calPts=[];calLine=null;
+  document.getElementById('calibInputs').style.display='none';
+  document.getElementById('calibSteps').style.display='block';
+  document.getElementById('calibBtn').textContent='📐 Start kalibrering';
+  document.getElementById('calibBtn').style.borderColor='';
+  setMode('place');
+  redraw();
+}
+function confirmCalib(){
+  const km=parseFloat(document.getElementById('calibDist').value);
+  const rWin=parseFloat(document.getElementById('calibRW').value);
+  const rLin=parseFloat(document.getElementById('calibRL').value);
+  const calibErr=document.getElementById('calibErr');
+  if(isNaN(km)||km<=0){calibErr.textContent='Oppgi gyldig avstand i meter';calibErr.style.display='block';document.getElementById('calibDist').focus();return;}
+  if(isNaN(rWin)||rWin<=0){calibErr.textContent='Oppgi gyldig rombredde';calibErr.style.display='block';document.getElementById('calibRW').focus();return;}
+  if(isNaN(rLin)||rLin<=0){calibErr.textContent='Oppgi gyldig romdybde';calibErr.style.display='block';document.getElementById('calibRL').focus();return;}
+  calibErr.style.display='none';
+  const dx=calPts[1].cx-calPts[0].cx, dy=calPts[1].cy-calPts[0].cy;
+  const pxDist=Math.sqrt(dx*dx+dy*dy);
+  fpxScale=pxDist/km;
+  document.getElementById('rW').value=rWin.toFixed(2);
+  document.getElementById('rL').value=rLin.toFixed(2);
+  const cs=document.getElementById('cStat');
+  cs.textContent='✓ '+km+'m ref · '+rWin.toFixed(1)+'×'+rLin.toFixed(1)+'m · '+fpxScale.toFixed(1)+' px/m';
+  cs.style.color='var(--ok)';
+  document.getElementById('calibInputs').style.display='none';
+  document.getElementById('calibSteps').style.display='block';
+  document.getElementById('calibBtn').textContent='📐 Start kalibrering';
+  document.getElementById('calibBtn').style.borderColor='';
+  // Auto-clear speakers/zones when room size changes (no confirm - blocked on file://)
+  if(speakers.length||zones.length){
+    speakers=[];zones=[];updateSpkList();updateZoneList();
+    const cs=document.getElementById('cStat');
+    cs.textContent+=' · Høyttalere nullstilt';
+  }
+  setMode('place');
+  redraw();
+}
+
+// ── ZONES ──────────────────────────────────────────────────────────────────────
+function addZone(){
+  const rw=getRW(),rl=getRL();
+  zones.push({id:zCount++,name:'Sone '+(zones.length+1),x:rw*.1,y:rl*.1,w:rw*.4,h:rl*.4,color:ZC[zones.length%ZC.length]});
+  updateZoneList();redraw();
+}
+function delZone(id){
+  zones=zones.filter(z=>z.id!==id);
+  speakers.forEach(s=>{if(s.zone===id)s.zone=null;});
+  updateZoneList();updateSpkList();redraw();
+}
+function calcStats(z){
+  if(!speakers.length)return{cov:0,dead:100};
+  const res=0.35,rh=getRH(),effH=Math.max(rh-1.5,0.5);
+  let cov=0,tot=0;
+  for(let rx=z.x;rx<z.x+z.w;rx+=res){
+    for(let ry=z.y;ry<z.y+z.h;ry+=res){
+      tot++;let ok=false;
+      speakers.filter(s=>s.zone===z.id).forEach(s=>{
+        if(ok)return;
+        const sp=SPK[s.model],dx=rx-s.x,dy=ry-s.y,dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<0.05){ok=true;return;}
+        const ha=sp.ang/2*Math.PI/180,cr=effH*Math.tan(ha);
+        if(isCeil(sp)){if(dist<=cr)ok=true;}
+        else{const d=s.dir*Math.PI/180,at=Math.atan2(dy,dx);let df=at-d;while(df>Math.PI)df-=2*Math.PI;while(df<-Math.PI)df+=2*Math.PI;if(Math.abs(df)<=ha&&dist<=sp.range)ok=true;}
+      });
+      if(ok)cov++;
+    }
+  }
+  return{cov:Math.round(cov/tot*100),dead:Math.round((tot-cov)/tot*100)};
+}
+function zHtml(){
+  return zones.map(function(z){
+    var sp2=speakers.filter(function(s){return s.zone==z.id;});
+    var st=calcStats(z);
+    return '<div class="zone-item">'
+      +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">'
+      +'<div style="width:9px;height:9px;border-radius:2px;background:'+z.color+'"></div>'
+      +'<input style="background:transparent;border:none;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:500;flex:1;padding:0" value="'+z.name+'" onchange="zones.find(zz=>zz.id==='+z.id+').name=this.value;updateRecs()">'
+      +'<span style="cursor:pointer;color:var(--muted);font-size:14px;line-height:1" onclick="delZone('+z.id+')">×</span></div>'
+      +'<div class="sg">'
+      +'<div class="sc"><div class="sv" style="color:'+cc(st.cov)+'">'+st.cov+'%</div><div class="sl">Dekning</div></div>'
+      +'<div class="sc"><div class="sv" style="color:var(--err)">'+st.dead+'%</div><div class="sl">Dødpunkt</div></div>'
+      +'<div class="sc"><div class="sv">'+sp2.length+'</div><div class="sl">Høyttalere</div></div>'
+      +'</div></div>';
+  }).join('');
+}
+function updateZoneList(){
+  document.getElementById('zList').innerHTML=zones.length?zHtml():'<span class="empty">Ingen soner — bruk «TEGN SONE»</span>';
+  updateRecs();
+}
+
+// ── SPEAKERS LIST ─────────────────────────────────────────────────────────────
+function updateSpkList(){
+  updateRecs();
+  const el=document.getElementById('sList');
+  if(!speakers.length){el.innerHTML='<span class="empty">Ingen plassert ennå</span>';return;}
+  el.innerHTML=speakers.map((s,i)=>{
+    const sp=SPK[s.model];
+    const zO=zones.map(z=>'<option value="'+z.id+'" '+(s.zone!=null&&s.zone==z.id?'selected':'')+'>'+z.name+'</option>').join('');
+    return '<div class="spk-row '+(selSpk===i?'sel':'')+'" onclick="selS('+i+')">'
+      +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'
+      +'<div style="width:7px;height:7px;border-radius:50%;background:'+sp.color+'"></div>'
+      +'<div style="font-size:11px;font-weight:500;flex:1">'+(i+1)+'. '+sp.name+'</div>'
+      +'<span style="cursor:pointer;color:var(--muted);font-size:14px;line-height:1" onclick="event.stopPropagation();delS('+i+')">×</span></div>'
+      +(isCeil(sp)
+        ?'<div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-bottom:4px">Takinnfelt — omnidireksjonell ↓</div>'
+        :'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+          +'<span style="font-size:9px;color:var(--muted);font-family:var(--mono);min-width:52px">RETNING</span>'
+          +'<input type="range" min="0" max="359" value="'+Math.round(s.dir)+'" style="flex:1;accent-color:var(--accent)" oninput="speakers['+i+'].dir=+this.value;this.nextElementSibling.textContent=this.value+\'°\';redraw()">'
+          +'<span style="font-size:9px;font-family:var(--mono);color:var(--accent);min-width:30px">'+Math.round(s.dir)+'°</span></div>')
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<span style="font-size:9px;color:var(--muted);font-family:var(--mono)">SONE:</span>'
+      +'<select data-i="'+i+'" onchange="asZ(this)" style="font-size:9px;flex:1;background:var(--s3);border:1px solid var(--border);color:var(--text);border-radius:2px;padding:2px 4px">'
+      +'<option value="">— ingen —</option>'+zO+'</select></div>'
+      +'<div style="font-size:9px;color:var(--dim);font-family:var(--mono);margin-top:3px">'
+      +'('+s.x.toFixed(1)+','+s.y.toFixed(1)+') m · '+sp.ang+'° · '+sp.pwr+'W</div></div>';
+  }).join('');
+}
+function selS(i){selSpk=selSpk===i?null:i;updateSpkList();redraw();}
+function delS(i){speakers.splice(i,1);if(selSpk>=speakers.length)selSpk=null;updateSpkList();updateZoneList();redraw();}
+function asZ(sel){const i=+sel.getAttribute('data-i');speakers[i].zone=sel.value===''?null:+sel.value;updateZoneList();redraw();}
+
+// ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
+function calcSpacing(id){
+  const sp=SPK[id];if(!sp)return null;
+  const effH=Math.max(getRH()-1.5,0.5),cr=effH*Math.tan(sp.ang/2*Math.PI/180);
+  return(cr*2*(getST()==='auditorium'?0.75:0.85)).toFixed(1);
+}
+function calcTap(id){
+  const sp=SPK[id];if(!sp||sp.mount==='sub')return null;
+  const volt=getSV(),st=getST(),target=st==='utility'?70:st==='meeting'?72:75;
+  const effH=Math.max(getRH()-1.5,0.5);
+  const taps=volt==='70'?(sp.taps70||[]):volt==='8ohm'?[sp.pwr]:(sp.taps100||[]);
+  const tok=taps.filter(t=>t<=sp.pwr);if(!tok.length)return null;
+  let rec=tok[tok.length-1];
+  for(const t of tok){const spl=sp.sens+10*Math.log10(t)-20*Math.log10(Math.max(effH,1));if(spl>=target){rec=t;break;}}
+  const splR=(sp.sens+10*Math.log10(rec)-20*Math.log10(Math.max(effH,1))).toFixed(0);
+  return{tap:rec,spl:splR,volt,target};
+}
+function updateRecs(){
+  const el=document.getElementById('recList');
+  if(!speakers.length){el.innerHTML='<span class="empty">Plasser høyttalere for anbefaling</span>';return;}
+  const tz=Math.max(1,zones.length),tp=speakers.reduce((s,x)=>s+SPK[x.model].pwr,0);
+  const n=speakers.length,volt=getSV(),st=getST(),hasConf=st==='meeting';
+  const rw=getRW(),rl=getRL();
+  const mc={};speakers.forEach(s=>{mc[s.model]=(mc[s.model]||0)+1;});
+  const dom=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  const rs=dom?calcSpacing(dom):null;
+  const tr=dom?calcTap(dom):null;
+  let rc='—';
+  if(dom&&rs){
+    const sM=parseFloat(rs);
+    // Speakers placed centered in grid cells, first at sM/2 from wall
+    // n = ceil(dim/sM) but min 1
+    const nx=Math.max(1,Math.ceil(rw/sM));
+    const ny=Math.max(1,Math.ceil(rl/sM));
+    const tot=nx*ny;
+    rc=nx+'×'+ny+' = '+tot+' stk';
+  }
+  const et=n*10;
+  const amp=AMPS.find(a=>a.totalW>=et*1.25&&a.zones>=tz)||AMPS[AMPS.length-1];
+  const proc=hasConf?(PROCS.find(p=>p.conf&&p.outs>=tz)||PROCS[6]):(PROCS.find(p=>!p.conf&&p.outs>=tz)||PROCS[3]);
+  const spL={office:'Fellesområde/landskap',meeting:'Møterom',auditorium:'Auditorium'};
+  const effH=Math.max(getRH()-1.5,0.5).toFixed(1);
+  let h='';
+  // Warning if room not calibrated
+  if(!fpxScale){
+    h+='<div style="background:rgba(200,169,110,.06);border:1px solid rgba(200,169,110,.3);border-radius:4px;padding:8px 10px;margin-bottom:8px;font-size:9px;font-family:var(--mono);color:var(--warn);line-height:1.6">'
+      +'⚠ Rom ikke kalibrert — anbefalinger basert på '+rw+'×'+rl+'m standard.<br>'
+      +'Bruk Kalibrer for nøyaktige beregninger.'
+      +'</div>';
+  }
+  if(rs){
+    h+='<div style="background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:6px">'
+      +'<div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:7px;letter-spacing:.1em">PLASSERING</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px">'
+      +'<div style="background:rgba(200,169,110,.08);border:1px solid rgba(200,169,110,.2);border-radius:3px;padding:7px;text-align:center">'
+      +'<div style="font-family:var(--mono);font-size:18px;font-weight:500;color:var(--accent)">'+rs+' m</div>'
+      +'<div style="font-size:9px;color:var(--muted);margin-top:2px">Maks avstand</div></div>'
+      +'<div style="background:rgba(126,184,200,.08);border:1px solid rgba(126,184,200,.2);border-radius:3px;padding:7px;text-align:center">'
+      +'<div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--a2)">'+rc+'</div>'
+      +'<div style="font-size:9px;color:var(--muted);margin-top:2px">For '+rw+'×'+rl+'m</div></div></div>'
+      +'<div style="font-size:9px;color:var(--muted);font-family:var(--mono)">Lyttehøyde 1.5m · Takavstand: '+effH+'m · '+spL[st]+'</div></div>';
+  }
+  if(tr){
+    h+='<div style="background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:6px">'
+      +'<div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:7px;letter-spacing:.1em">TRANSFORMER-TAP — '+volt+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px">'
+      +'<div style="background:rgba(126,196,150,.08);border:1px solid rgba(126,196,150,.2);border-radius:3px;padding:6px;text-align:center">'
+      +'<div style="font-family:var(--mono);font-size:16px;font-weight:500;color:var(--ok)">'+tr.tap+'W</div>'
+      +'<div style="font-size:8px;color:var(--muted);margin-top:2px">Anbefalt tap</div></div>'
+      +'<div style="background:rgba(200,169,110,.06);border:1px solid rgba(200,169,110,.15);border-radius:3px;padding:6px;text-align:center">'
+      +'<div style="font-family:var(--mono);font-size:16px;font-weight:500;color:var(--accent)">'+tr.spl+' dB</div>'
+      +'<div style="font-size:8px;color:var(--muted);margin-top:2px">SPL @ 1.5m</div></div>'
+      +'<div style="background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:3px;padding:6px;text-align:center">'
+      +'<div style="font-family:var(--mono);font-size:16px;font-weight:500;color:var(--text)">'+tr.target+' dB</div>'
+      +'<div style="font-size:8px;color:var(--muted);margin-top:2px">Mål-SPL</div></div></div>'
+      +'<div style="font-size:9px;color:rgba(200,169,110,.5);font-family:var(--mono)">Verifiser mot tap-chart i datablad</div></div>';
+  }
+  h+='<div class="rec-box"><div class="badge">FORSTERKER</div><div class="rec-name">'+amp.name+'</div><div class="rec-desc">'+amp.desc+'</div>'
+    +'<div class="rec-meta">'+n+' høyttalere · est. '+et+'W tap · kapasitet '+amp.totalW+'W</div></div>';
+  h+='<div class="rec-box"><div class="badge">PROSESSOR</div><div class="rec-name">'+proc.name+'</div><div class="rec-desc">'+proc.desc+'</div>'
+    +'<div class="rec-meta">'+proc.ins+' inn / '+proc.outs+' ut'+(proc.conf?' · AEC konferanse':'')+'</div></div>';
+  h+='<div style="padding:8px;background:rgba(0,0,0,.2);border-radius:3px;font-size:9px;font-family:var(--mono);color:var(--muted);line-height:1.8;margin-top:6px">'
+    +'<span style="color:var(--text);display:block;margin-bottom:2px">Systemsammendrag</span>'
+    +rw+'×'+rl+'m · '+(rw*rl).toFixed(0)+'m² · Tak '+getRH()+'m<br>'
+    +n+' høyttalere · '+tp+'W · '+Math.max(1,zones.length)+' sone'+(zones.length>1?'r':'')+'</div>';
+  el.innerHTML=h;
+}
+
+// ── HEATMAP ───────────────────────────────────────────────────────────────────
+function drawHeatmap(o,rw,rl,sc){
+  if(!speakers.length)return;
+  ctx.save();ctx.beginPath();ctx.rect(o.x,o.y,rw*sc,rl*sc);ctx.clip();
+  const res=4,rh=getRH(),effH=Math.max(rh-1.5,0.5);
+  const cols=Math.ceil(rw*sc/res),rows=Math.ceil(rl*sc/res);
+  for(let ci=0;ci<cols;ci++){
+    for(let ri=0;ri<rows;ri++){
+      const px=o.x+ci*res+res/2,py=o.y+ri*res+res/2;
+      const rx=(px-o.x)/sc,ry=(py-o.y)/sc;
+      if(rx<0||rx>rw||ry<0||ry>rl)continue;
+      const inAny=zones.length===0||zones.some(z=>inZ(rx,ry,z));
+      let dL=-Infinity,cnt=0;
+      speakers.forEach(s=>{
+        const sp=SPK[s.model];
+        if(sp.mount==='sub')return;
+        const dx=rx-s.x,dy=ry-s.y,dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<0.05)return;
+        const ha=sp.ang/2*Math.PI/180,cr=effH*Math.tan(ha);
+        let ok=false,ro=0;
+        if(isCeil(sp)){if(dist<=cr){ok=true;ro=Math.pow(dist/cr,2)*6;}}
+        else if(sp.mount==='edge'){
+          const d=s.dir*Math.PI/180,at=Math.atan2(dy,dx);let df=at-d;
+          while(df>Math.PI)df-=2*Math.PI;while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=ha&&dist<=cr*1.5){ok=true;ro=Math.pow(Math.abs(df)/ha,1.5)*4+Math.pow(dist/(cr*1.5),2)*3;}
+        }else{
+          const d=s.dir*Math.PI/180,at=Math.atan2(dy,dx);let df=at-d;
+          while(df>Math.PI)df-=2*Math.PI;while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=ha&&dist<=sp.range){ok=true;ro=Math.pow(Math.abs(df)/ha,2)*6+Math.pow(dist/sp.range,2)*3;}
+        }
+        if(!ok)return;
+        const d3=Math.sqrt(dist*dist+effH*effH),spl=sp.sens-20*Math.log10(Math.max(d3,.5))-ro;
+        dL=dL===-Infinity?Math.pow(10,spl/10):dL+Math.pow(10,spl/10);cnt++;
+      });
+      if(dL===-Infinity){if(inAny){ctx.fillStyle='rgba(200,60,60,.12)';ctx.fillRect(px-res/2,py-res/2,res,res);}continue;}
+      if(zones.length>0&&!inAny)continue;
+      const db=10*Math.log10(dL);let r,g,b,a;
+      if(cnt>1&&db>86){r=200;g=80;b=80;a=.72;}
+      else if(db>83){r=100;g=200;b=90;a=.68;}
+      else if(db>80){r=80;g=150;b=230;a=.52;}
+      else{r=80;g=80;b=120;a=.38;}
+      ctx.fillStyle=`rgba(${r},${g},${b},${a})`;ctx.fillRect(px-res/2,py-res/2,res,res);
+    }
+  }
+  ctx.restore();
+}
+
+// ── REDRAW ────────────────────────────────────────────────────────────────────
+function redraw(){
+  const rw=getRW(),rl=getRL(),sc=getScale(),o=getOff();
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle='#0d0d0d';ctx.fillRect(o.x,o.y,rw*sc,rl*sc);
+  if(floorImg && floorImg.complete && floorImg.naturalWidth>0){ctx.globalAlpha=.38;ctx.drawImage(floorImg,o.x,o.y,rw*sc,rl*sc);ctx.globalAlpha=1;}
+  ctx.strokeStyle='rgba(255,255,255,.025)';ctx.lineWidth=.5;
+  for(let x=0;x<=rw;x++){ctx.beginPath();ctx.moveTo(o.x+x*sc,o.y);ctx.lineTo(o.x+x*sc,o.y+rl*sc);ctx.stroke();}
+  for(let y=0;y<=rl;y++){ctx.beginPath();ctx.moveTo(o.x,o.y+y*sc);ctx.lineTo(o.x+rw*sc,o.y+y*sc);ctx.stroke();}
+  calPts.forEach((p,i)=>{
+    ctx.beginPath();ctx.arc(p.cx,p.cy,6,0,Math.PI*2);
+    ctx.fillStyle='#ffdd44';ctx.strokeStyle='#000';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();
+    ctx.fillStyle='#ffdd44';ctx.font='bold 10px DM Mono,monospace';ctx.textAlign='left';ctx.fillText(i===0?'A':'B',p.cx+8,p.cy-4);
+  });
+  if(calPts.length===2&&fpxScale){
+    const dx=calPts[1].cx-calPts[0].cx,dy=calPts[1].cy-calPts[0].cy;
+    const dm=Math.sqrt(dx*dx+dy*dy)/fpxScale;
+    ctx.beginPath();ctx.moveTo(calPts[0].cx,calPts[0].cy);ctx.lineTo(calPts[1].cx,calPts[1].cy);
+    ctx.strokeStyle='#ffdd44';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
+    const mx=(calPts[0].cx+calPts[1].cx)/2,my=(calPts[0].cy+calPts[1].cy)/2;
+    ctx.fillStyle='rgba(0,0,0,.85)';ctx.fillRect(mx-32,my-16,64,18);
+    ctx.fillStyle='#ffdd44';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';ctx.fillText(dm.toFixed(2)+' m',mx,my-3);
+  }
+  if(calLine&&calPts.length===1){
+    ctx.beginPath();ctx.moveTo(calPts[0].cx,calPts[0].cy);ctx.lineTo(calLine.cx,calLine.cy);
+    ctx.strokeStyle='rgba(255,220,68,.4)';ctx.lineWidth=1;ctx.setLineDash([3,3]);ctx.stroke();ctx.setLineDash([]);
+  }
+  zones.forEach(z=>{const[r,g,b]=hx(z.color);ctx.fillStyle=`rgba(${r},${g},${b},.05)`;ctx.fillRect(o.x+z.x*sc,o.y+z.y*sc,z.w*sc,z.h*sc);});
+  drawHeatmap(o,rw,rl,sc);
+  zones.forEach(z=>{
+    const[r,g,b]=hx(z.color);
+    ctx.strokeStyle=`rgba(${r},${g},${b},.7)`;ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+    ctx.strokeRect(o.x+z.x*sc,o.y+z.y*sc,z.w*sc,z.h*sc);ctx.setLineDash([]);
+    ctx.fillStyle=`rgba(${r},${g},${b},.9)`;ctx.font='bold 10px DM Mono,monospace';ctx.textAlign='left';
+    ctx.fillText(z.name,o.x+z.x*sc+5,o.y+z.y*sc+14);
+  });
+  if(zDraw&&zPt1&&zPrev){
+    const x1=Math.min(zPt1.x,zPrev.x),y1=Math.min(zPt1.y,zPrev.y);
+    const x2=Math.max(zPt1.x,zPrev.x),y2=Math.max(zPt1.y,zPrev.y);
+    ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.strokeRect(o.x+x1*sc,o.y+y1*sc,(x2-x1)*sc,(y2-y1)*sc);ctx.setLineDash([]);
+  }
+  ctx.strokeStyle='rgba(255,255,255,.4)';ctx.lineWidth=1.5;ctx.strokeRect(o.x,o.y,rw*sc,rl*sc);
+  ctx.fillStyle='rgba(255,255,255,.25)';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';
+  ctx.fillText(rw+'m',o.x+rw*sc/2,o.y-7);
+  ctx.save();ctx.translate(o.x-10,o.y+rl*sc/2);ctx.rotate(-Math.PI/2);ctx.fillText(rl+'m',0,0);ctx.restore();
+  const effH=Math.max(getRH()-1.5,0.5);
+  speakers.forEach((s,i)=>{
+    const sp=SPK[s.model],p=r2c(s.x,s.y),sc2=getScale();
+    const cr=effH*Math.tan(sp.ang/2*Math.PI/180);
+    if(sp.mount==='sub'){
+      ctx.beginPath();ctx.arc(p.x,p.y,9,0,Math.PI*2);
+      ctx.fillStyle='#333';ctx.strokeStyle=sp.color;ctx.lineWidth=2;ctx.fill();ctx.stroke();
+      ctx.fillStyle=sp.color;ctx.font='bold 7px DM Mono,monospace';ctx.textAlign='center';ctx.fillText('SUB',p.x,p.y+2.5);
+      return;
+    }
+    if(isCeil(sp)){
+      ctx.save();ctx.beginPath();ctx.rect(o.x,o.y,rw*sc2,rl*sc2);ctx.clip();
+      ctx.beginPath();ctx.arc(p.x,p.y,cr*sc2,0,Math.PI*2);
+      ctx.strokeStyle=sp.color+'77';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
+      ctx.restore();
+    }else{
+      const d=s.dir*Math.PI/180;
+      ctx.strokeStyle=sp.color;ctx.lineWidth=1.5;ctx.setLineDash([3,3]);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+Math.cos(d)*16,p.y+Math.sin(d)*16);ctx.stroke();ctx.setLineDash([]);
+    }
+    const isSel=selSpk===i;
+    ctx.beginPath();ctx.arc(p.x,p.y,isSel?9:7,0,Math.PI*2);
+    ctx.fillStyle=isSel?'#fff':sp.color;ctx.strokeStyle=isSel?sp.color:'rgba(0,0,0,.6)';ctx.lineWidth=isSel?2:1;
+    ctx.fill();ctx.stroke();
+    ctx.fillStyle=isSel?sp.color:'#111';ctx.font='bold 8px DM Mono,monospace';ctx.textAlign='center';ctx.fillText(i+1,p.x,p.y+3);
+    if(s.zone!=null){const z=zones.find(zz=>zz.id===s.zone);if(z){ctx.beginPath();ctx.arc(p.x+8,p.y-8,3,0,Math.PI*2);ctx.fillStyle=z.color;ctx.fill();}}
+  });
+}
+
+// ── EVENTS ────────────────────────────────────────────────────────────────────
+function gxy(e){const r=cv.getBoundingClientRect();return{cx:(e.clientX-r.left)*(cv.width/r.width),cy:(e.clientY-r.top)*(cv.height/r.height)};}
+cv.addEventListener('mousedown',e=>{
+  const{cx,cy}=gxy(e),rp=c2r(cx,cy);
+  if(mode==='calibrate'){
+    // Use mousedown only to prevent accidental drag - actual point set in click handler
+    return;
+  }
+  if(mode==='zone'){zDraw=true;zPt1={x:rp.x,y:rp.y};zPrev={x:rp.x,y:rp.y};return;}
+  if(mode==='move'){
+    let found=null;
+    speakers.forEach((s,i)=>{if(Math.hypot(s.x-rp.x,s.y-rp.y)<0.8)found=i;});
+    if(found!==null){dragSpk=found;selSpk=found;const p=r2c(speakers[found].x,speakers[found].y);dragOff={x:cx-p.x,y:cy-p.y};updateSpkList();}
+    return;
+  }
+  if(mode==='pan'){panStart={x:e.clientX-panX,y:e.clientY-panY};return;}
+});
+cv.addEventListener('mousemove',e=>{
+  const{cx,cy}=gxy(e),rp=c2r(cx,cy);
+  if(mode==='calibrate'&&calPts.length===1){calLine={cx,cy};redraw();return;}
+  if(mode==='calibrate'&&calPts.length===0){hint('Klikk punkt A på plantegningen');return;}
+  if(zDraw&&zPt1){zPrev={x:rp.x,y:rp.y};redraw();return;}
+  if(dragSpk!==null){
+    const nrp=c2r(cx-dragOff.x,cy-dragOff.y);
+    speakers[dragSpk].x=clamp(nrp.x,0,getRW());speakers[dragSpk].y=clamp(nrp.y,0,getRL());
+    updateSpkList();updateZoneList();redraw();return;
+  }
+  if(panStart){panX=e.clientX-panStart.x;panY=e.clientY-panStart.y;redraw();return;}
+  if(mode==='place'&&selModel&&rp.x>=0&&rp.x<=getRW()&&rp.y>=0&&rp.y<=getRL())
+    hint(SPK[selModel].name+' → ('+rp.x.toFixed(1)+', '+rp.y.toFixed(1)+') m');
+});
+cv.addEventListener('mouseup',e=>{
+  const{cx,cy}=gxy(e),rp=c2r(cx,cy);
+  if(zDraw&&zPt1){
+    zDraw=false;
+    const x1=Math.min(zPt1.x,rp.x),y1=Math.min(zPt1.y,rp.y),x2=Math.max(zPt1.x,rp.x),y2=Math.max(zPt1.y,rp.y);
+    if((x2-x1)>.5&&(y2-y1)>.5){zones.push({id:zCount++,name:'Sone '+(zones.length+1),x:x1,y:y1,w:x2-x1,h:y2-y1,color:ZC[zones.length%ZC.length]});updateZoneList();}
+    zPt1=null;zPrev=null;redraw();return;
+  }
+  dragSpk=null;panStart=null;
+});
+cv.addEventListener('click',e=>{
+  const{cx,cy}=gxy(e),rp=c2r(cx,cy);
+  // Calibration: set A and B points on click
+  if(mode==='calibrate'){
+    calPts.push({cx,cy});
+    if(calPts.length===1){
+      hint('Punkt A satt — klikk punkt B');
+      document.getElementById('calibBtn').textContent='📐 Klikk punkt B...';
+    } else if(calPts.length===2){
+      // Show input panel
+      document.getElementById('calibInputs').style.display='block';
+      document.getElementById('calibSteps').style.display='none';
+      document.getElementById('calibRW').value=getRW();
+      document.getElementById('calibRL').value=getRL();
+      document.getElementById('calibDist').value='';
+      document.getElementById('calibDist').focus();
+      hint('Oppgi mål i venstre panel og trykk Bekreft');
+      document.getElementById('calibBtn').textContent='📐 Oppgi mål...';
+    }
+    redraw(); return;
+  }
+  if(mode!=='place'||!selModel)return;
+  if(rp.x<0||rp.x>getRW()||rp.y<0||rp.y>getRL())return;
+  const az=zones.find(z=>inZ(rp.x,rp.y,z));
+  speakers.push({id:sCount++,model:selModel,x:rp.x,y:rp.y,dir:Math.atan2(getRL()/2-rp.y,getRW()/2-rp.x)*180/Math.PI,zone:az?az.id:null});
+  updateSpkList();updateZoneList();redraw();
+});
+cv.addEventListener('contextmenu',e=>{
+  e.preventDefault();if(selSpk===null)return;
+  const{cx,cy}=gxy(e),rp=c2r(cx,cy);
+  speakers[selSpk].dir=Math.atan2(rp.y-speakers[selSpk].y,rp.x-speakers[selSpk].x)*180/Math.PI;
+  updateSpkList();redraw();
+});
+
+// ── FILE LOAD ─────────────────────────────────────────────────────────────────
+function loadFloor(e){
+  const file=e.target.files[0];if(!file)return;
+  const st=document.getElementById('fStat');
+  st.textContent='Laster: '+file.name;st.style.color='var(--muted)';
+  console.log('Loading file:', file.name, file.type, file.size, 'bytes');
+  if(file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf')){
+    if(typeof pdfjsLib==='undefined'){st.textContent='⚠ PDF.js ikke tilgjengelig — bruk PNG/JPG';st.style.color='var(--err)';return;}
+    pdfjsLib.GlobalWorkerOptions.workerSrc='';
+    const r=new FileReader();
+    r.onload=async ev=>{
+      try{
+        const pdf=await pdfjsLib.getDocument({data:ev.target.result,disableWorker:true,disableRange:true}).promise;
+        const page=await pdf.getPage(1);
+        const rv=page.getViewport({scale:1.0});
+        const as=Math.min(4000/Math.max(rv.width,rv.height),4.0);
+        const vp=page.getViewport({scale:as});
+        const oc=document.createElement('canvas');oc.width=vp.width;oc.height=vp.height;
+        await page.render({canvasContext:oc.getContext('2d'),viewport:vp}).promise;
+        floorImg=new Image();
+        floorImg.onload=()=>{st.textContent='PDF · '+vp.width+'×'+vp.height+'px · skala '+as.toFixed(1)+'x';st.style.color='var(--muted)';redraw();};
+        floorImg.src=oc.toDataURL();
+      }catch(err){st.textContent='⚠ PDF feilet — ta skjermbilde og last opp PNG';st.style.color='var(--err)';}
+    };r.readAsArrayBuffer(file);
+  }else{
+    // Use FileReader with base64 - works on file:// and all browsers
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      const img = new Image();
+      img.onload = function() {
+        floorImg = img;
+        st.textContent = 'Lastet · ' + img.naturalWidth + '×' + img.naturalHeight + 'px';
+        st.style.color = 'var(--muted)';
+        redraw();
+      };
+      img.onerror = function() {
+        st.textContent = '⚠ Bildet kunne ikke dekodes — prøv en annen fil';
+        st.style.color = 'var(--err)';
+        floorImg = null;
+      };
+      img.src = ev.target.result; // base64 data URL - always works
+    };
+    reader.onerror = function() {
+      st.textContent = '⚠ Kunne ikke lese filen';
+      st.style.color = 'var(--err)';
+    };
+    reader.readAsDataURL(file);
+  }
+  e.target.value='';
+}
+
+// ── EXPORT / RESET ────────────────────────────────────────────────────────────
+function doExport(){
+  if(!speakers.length){
+    const st=document.getElementById('fStat');
+    st.textContent='⚠ Plasser høyttalere først';
+    st.style.color='var(--err)';
+    setTimeout(()=>{st.textContent='';st.style.color='var(--muted)';},3000);
+    return;
+  }
+  let t='BOSE COVERAGE SIMULATOR — RAPPORT\n'+'═'.repeat(50)+'\n';
+  t+=`Dato: ${new Date().toLocaleDateString('no-NO')}\n`;
+  t+=`Rom: ${getRW()}×${getRL()}m · Takhøyde: ${getRH()}m\n`;
+  t+=`System: ${getSV()} · Brukstype: ${getST()}\n\n`;
+  const mc={};speakers.forEach(s=>{mc[s.model]=(mc[s.model]||0)+1;});
+  t+='HØYTTALERE:\n';Object.entries(mc).forEach(([m,n])=>t+='  '+n+'× '+SPK[m].name+' ('+SPK[m].ang+'° · '+SPK[m].pwr+'W · '+SPK[m].sens+'dB)\n');
+  t+='\nPLASSERINGER:\n';speakers.forEach((s,i)=>{const m=SPK[s.model];t+='  '+(i+1)+'. '+m.name+' @ ('+s.x.toFixed(2)+', '+s.y.toFixed(2)+') m · '+Math.round(s.dir)+'° · '+m.pwr+'W\n';});
+  if(zones.length){t+='\nSONER:\n';zones.forEach(z=>{const st=calcStats(z);t+='  '+z.name+': Dekning '+st.cov+'% · Dødpunkt '+st.dead+'%\n';});}
+  // Create download link - works on file:// protocol
+  const blob=new Blob([t],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='bose_rapport_'+new Date().toISOString().slice(0,10)+'.txt';
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  const st=document.getElementById('fStat');
+  st.textContent='✓ Rapport lastet ned';st.style.color='var(--ok)';
+  setTimeout(()=>{st.textContent='';st.style.color='var(--muted)';},3000);
+}
+function doReset(){
+  const btn=document.getElementById('resetBtn');
+  if(btn.getAttribute('data-confirm')!=='1'){
+    btn.textContent='Sikker? Klikk igjen';
+    btn.setAttribute('data-confirm','1');
+    setTimeout(()=>{btn.textContent='Nullstill';btn.removeAttribute('data-confirm');},3000);
+    return;
+  }
+  btn.textContent='Nullstill';
+  btn.removeAttribute('data-confirm');
+  speakers=[];zones=[];selSpk=null;panX=0;panY=0;
+  calPts=[];calLine=null;fpxScale=null;floorImg=null;zCount=0;sCount=0;
+  document.getElementById('cStat').textContent='';
+  document.getElementById('fStat').textContent='';
+  updateSpkList();updateZoneList();redraw();
+}
+redraw();
+
+// File upload via proper event listener (avoids browser security blocks)
+document.getElementById('uploadBtn').addEventListener('click', function(){
+  document.getElementById('fi').click();
+});
+document.getElementById('fi').addEventListener('change', function(e){
+  loadFloor(e);
+});
+</script>
+</body>
+</html>
