@@ -1,0 +1,2605 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bose Coverage Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// Fallback: if pdf.js CDN fails, try alternative
+window.addEventListener('error', function(e){
+  if(e.filename && e.filename.includes('pdf.min.js')){
+    var s=document.createElement('script');
+    s.src='https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
+    document.head.appendChild(s);
+  }
+}, true);
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg:#0f0f0f; --surface:#1a1a1a; --surface2:#222; --border:#2e2e2e;
+    --text:#e8e8e8; --muted:#666; --accent:#c8a96e; --accent2:#7eb8c8;
+    --danger:#c87e7e; --success:#7ec896; --warn:#c8b47e;
+    --mono:'DM Mono',monospace; --sans:'DM Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;
+    display:grid;grid-template-rows:46px 1fr;grid-template-columns:280px 1fr 290px;overflow:hidden}
+
+  header{grid-column:1/-1;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 16px;gap:14px}
+  header h1{font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);font-family:var(--mono)}
+  .hdr-sep{color:var(--border);font-size:18px}
+  .hdr-actions{margin-left:auto;display:flex;gap:6px}
+  .btn{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:3px;
+    border:1px solid var(--border);background:var(--surface2);color:var(--text);
+    cursor:pointer;transition:all .12s;letter-spacing:.04em}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.active{background:var(--accent);color:#0f0f0f;border-color:var(--accent);font-weight:600}
+  .btn.danger{border-color:var(--danger);color:var(--danger)}
+  .btn.success{border-color:var(--success);color:var(--success)}
+
+  /* PANELS */
+  .left-panel,.right-panel{background:var(--surface);overflow-y:auto;padding:14px;
+    display:flex;flex-direction:column;gap:16px}
+  .left-panel{border-right:1px solid var(--border)}
+  .right-panel{border-left:1px solid var(--border)}
+  .sec-label{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .sec-label::after{content:'';flex:1;height:1px;background:var(--border)}
+  hr{border:none;border-top:1px solid var(--border)}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field label{font-size:9px;color:var(--muted);font-family:var(--mono);letter-spacing:.06em}
+  .field input,.field select{background:var(--surface2);border:1px solid var(--border);
+    color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:3px;width:100%}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:8px}
+
+  /* Mode bar */
+  .mode-bar{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    display:flex;gap:3px;background:rgba(10,10,10,.92);border:1px solid var(--border);
+    border-radius:4px;padding:3px;z-index:20}
+  .mode-btn{font-family:var(--mono);font-size:9px;padding:4px 9px;border-radius:2px;
+    border:none;background:transparent;color:var(--muted);cursor:pointer;
+    transition:all .12s;letter-spacing:.06em}
+  .mode-btn:hover{color:var(--text)}
+  .mode-btn.active{background:var(--accent);color:#0f0f0f;font-weight:600}
+
+  /* Canvas */
+  .canvas-area{position:relative;background:#0a0a0a;overflow:hidden}
+  canvas{display:block}
+  .canvas-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.75);color:var(--muted);font-size:10px;font-family:var(--mono);
+    padding:4px 12px;border-radius:2px;pointer-events:none;white-space:nowrap;z-index:10}
+
+  /* Speaker buttons */
+  .cat-title{font-size:9px;color:var(--muted);font-family:var(--mono);padding:6px 0 3px;
+    text-transform:uppercase;letter-spacing:.1em}
+  .spk-btn{display:flex;align-items:center;gap:7px;width:100%;padding:6px 9px;
+    margin-bottom:2px;background:var(--surface2);border:1px solid transparent;
+    border-radius:3px;cursor:pointer;transition:all .1s;text-align:left;color:var(--text);
+    font-family:var(--sans);font-size:11px}
+  .spk-btn:hover{border-color:var(--border)}
+  .spk-btn.selected{border-color:var(--accent);background:rgba(200,169,110,.08)}
+  .spk-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .spk-name{font-size:11px;font-weight:500}
+  .spk-spec{font-size:9px;color:var(--muted);font-family:var(--mono)}
+
+  /* Zone list */
+  .zone-item{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+    padding:9px 11px;margin-bottom:5px;cursor:pointer;transition:border-color .12s}
+  .zone-item:hover,.zone-item.active{border-color:var(--accent)}
+  .zone-header{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .zone-color{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+  .zone-name-input{background:transparent;border:none;color:var(--text);font-family:var(--sans);
+    font-size:12px;font-weight:500;width:120px;padding:0;cursor:pointer}
+  .zone-name-input:focus{outline:none;border-bottom:1px solid var(--accent);cursor:text}
+  .zone-del{margin-left:auto;cursor:pointer;color:var(--muted);font-size:15px;line-height:1}
+  .zone-del:hover{color:var(--danger)}
+  .zone-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px}
+  .zstat{background:rgba(0,0,0,.3);border-radius:3px;padding:4px 6px;text-align:center}
+  .zstat-val{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--accent)}
+  .zstat-lbl{font-size:8px;color:var(--muted);margin-top:1px}
+
+  /* Speaker rows */
+  .spk-row{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+    padding:9px 11px;margin-bottom:5px}
+  .spk-row.active{border-color:var(--accent)}
+  .spk-row-header{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  .spk-row-name{font-size:11px;font-weight:500;flex:1}
+  .spk-del2{cursor:pointer;color:var(--muted);font-size:15px}
+  .spk-del2:hover{color:var(--danger)}
+  .ctrl-row{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .ctrl-label{font-size:9px;color:var(--muted);font-family:var(--mono);min-width:52px}
+  .ctrl-row input[type=range]{flex:1;accent-color:var(--accent)}
+  .ctrl-val{font-size:9px;font-family:var(--mono);color:var(--accent);min-width:32px;text-align:right}
+  .spk-zone-sel{font-size:9px;font-family:var(--mono);background:var(--surface);
+    border:1px solid var(--border);color:var(--text);border-radius:2px;padding:2px 5px}
+
+  /* Rec boxes */
+  .rec-box{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px}
+  .rec-badge{display:inline-block;font-size:8px;font-family:var(--mono);padding:2px 6px;
+    border-radius:2px;background:rgba(200,169,110,.15);color:var(--accent);margin-bottom:4px}
+  .rec-name{font-size:12px;font-weight:500;margin-bottom:3px}
+  .rec-reason{font-size:10px;color:var(--muted);line-height:1.5}
+  .rec-meta{font-size:9px;font-family:var(--mono);color:var(--muted);margin-top:5px}
+
+  /* Legend */
+  .legend{display:flex;flex-direction:column;gap:4px}
+  .leg-row{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted)}
+  .leg-sw{width:22px;height:8px;border-radius:2px;flex-shrink:0}
+
+  .add-zone-btn{width:100%;padding:7px;background:transparent;border:1px dashed var(--border);
+    border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:10px;
+    cursor:pointer;transition:all .12s}
+  .add-zone-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+  .empty-msg{font-size:10px;color:var(--muted);font-family:var(--mono)}
+
+  .zone-assign{display:flex;align-items:center;gap:6px;margin-top:4px}
+  .zone-assign label{font-size:9px;color:var(--muted);font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bose Coverage Simulator</h1>
+  <span class="hdr-sep">|</span>
+  <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">Multi-sone · dB-visualisering</span>
+  <div class="hdr-actions">
+    <button class="btn" onclick="document.getElementById('pdfInput').click()">Last opp PDF / bilde</button>
+    <input type="file" id="pdfInput" accept="image/*,.pdf,application/pdf" style="display:none" onchange="loadFloor(event)"><span id="floorStatus" style="font-size:9px;color:var(--muted);font-family:var(--mono)"></span>
+    <button class="btn" id="calibBtn" onclick="startCalib()">📐 Kalibrer</button>
+    <button class="btn" onclick="exportReport()">Eksporter</button>
+    <button class="btn danger" onclick="clearAll()">Nullstill</button>
+  </div>
+</header>
+
+<!-- LEFT: Room + Speakers -->
+<div class="left-panel">
+  <div>
+    <div class="sec-label">Romstørrelse</div>
+    <div class="row">
+      <div class="field"><label>BREDDE m</label><input type="number" id="rW" value="20" min="2" max="300" step="0.5" onchange="redraw()"></div>
+      <div class="field"><label>DYBDE m</label><input type="number" id="rL" value="15" min="2" max="300" step="0.5" onchange="redraw()"></div>
+      <div class="field"><label>TAKHØYDE m</label><input type="number" id="rH" value="2.7" min="1.5" max="20" step="0.1" onchange="redraw()"></div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <div class="field" style="flex:1">
+        <label>SYSTEM</label>
+        <select id="sysVolt" onchange="updateRecs()">
+          <option value="100">100V (standard)</option>
+          <option value="70">70V</option>
+          <option value="8ohm">8 ohm direkte</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1">
+        <label>BRUKSOMRÅDE</label>
+        <select id="spaceType" onchange="updateRecs()">
+          <option value="office">Kontor / åpent landskap</option>
+          <option value="meeting">Møterom</option>
+          <option value="reception">Resepsjon / lobby</option>
+          <option value="utility">Servicerom / korridor</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="calibSection">
+    <div class="sec-label">Kalibrering</div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:10px;font-family:var(--mono)">
+      <div id="calibStatus" style="color:var(--muted);margin-bottom:8px">Ingen kalibrering utført</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" onclick="startCalib()">📐 Kalibrer</button>
+        <button class="btn danger" onclick="resetCalib()">Nullstill</button>
+      </div>
+      <div style="margin-top:8px;color:var(--muted);line-height:1.5;font-size:10px">
+        1. Last opp plantegning (PNG/JPG/PDF)<br>
+        2. Trykk «Kalibrer» — klikk på et kjent punkt A<br>
+        3. Klikk på punkt B — oppgi avstand i meter<br>
+        4. Gul linje bekrefter kalibreringen<br><br>
+        <span style="color:var(--warn)">💡 Tips: Hvis PDF ikke laster, ta screenshot og last opp som PNG.</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="sec-label">Høyttaler — klikk for å plassere</div>
+
+    <div class="cat-title">Ceiling — DesignMax</div>
+    <button class="spk-btn" onclick="sel('DM2C')" id="b-DM2C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM2C-LP</div><div class="spk-spec">100° · 8W · Lavprofil</div></div></button>
+    <button class="spk-btn" onclick="sel('DM3C')" id="b-DM3C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM3C</div><div class="spk-spec">100° · 30W</div></div></button>
+    <button class="spk-btn" onclick="sel('DM5C')" id="b-DM5C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM5C</div><div class="spk-spec">130° · 60W · 87dB</div></div></button>
+    <button class="spk-btn" onclick="sel('DM8C')" id="b-DM8C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM8C</div><div class="spk-spec">90° · 120W · High output</div></div></button>
+
+    <div class="cat-title">Ceiling — EdgeMax</div>
+    <button class="spk-btn" onclick="sel('EM90')" id="b-EM90"><div class="spk-dot" style="background:#c87e7e"></div><div><div class="spk-name">EdgeMax EM90</div><div class="spk-spec">90° · 60W · Takhjørne</div></div></button>
+    <button class="spk-btn" onclick="sel('EM180')" id="b-EM180"><div class="spk-dot" style="background:#c87e7e"></div><div><div class="spk-name">EdgeMax EM180</div><div class="spk-spec">180° · 60W · Takhjørne</div></div></button>
+
+    <div class="cat-title">Ceiling — FreeSpace</div>
+    <button class="spk-btn" onclick="sel('FS3')" id="b-FS3"><div class="spk-dot" style="background:#7ec896"></div><div><div class="spk-name">FreeSpace 3</div><div class="spk-spec">130° · 40W</div></div></button>
+    <button class="spk-btn" onclick="sel('FS3F')" id="b-FS3F"><div class="spk-dot" style="background:#7ec896"></div><div><div class="spk-name">FreeSpace 3F</div><div class="spk-spec">130° · 40W · Flush</div></div></button>
+
+    <div class="cat-title">Surface — DesignMax</div>
+    <button class="spk-btn" onclick="sel('DM5SE')" id="b-DM5SE"><div class="spk-dot" style="background:#b87ec8"></div><div><div class="spk-name">DM5SE</div><div class="spk-spec">100°×60° · 60W · Vegg</div></div></button>
+    <button class="spk-btn" onclick="sel('DM8S')" id="b-DM8S"><div class="spk-dot" style="background:#b87ec8"></div><div><div class="spk-name">DM8S</div><div class="spk-spec">90°×50° · 120W · Vegg</div></div></button>
+
+    <div class="cat-title">Surface — FreeSpace DS</div>
+    <button class="spk-btn" onclick="sel('DS16F')" id="b-DS16F"><div class="spk-dot" style="background:#c8a96e"></div><div><div class="spk-name">DS16F</div><div class="spk-spec">90° · 16W</div></div></button>
+    <button class="spk-btn" onclick="sel('DS40F')" id="b-DS40F"><div class="spk-dot" style="background:#c8a96e"></div><div><div class="spk-name">DS40F</div><div class="spk-spec">100° · 40W</div></div></button>
+    <button class="spk-btn" onclick="sel('DS100F')" id="b-DS100F"><div class="spk-dot" style="background:#c8a96e"></div><div><div class="spk-name">DS100F</div><div class="spk-spec">90° · 100W</div></div></button>
+
+    <div class="cat-title">Pendant — DesignMax</div>
+    <button class="spk-btn" onclick="sel('DM3P')" id="b-DM3P"><div class="spk-dot" style="background:#e8b060"></div><div><div class="spk-name">DM3P</div><div class="spk-spec">100° · 30W · Pendel</div></div></button>
+    <button class="spk-btn" onclick="sel('DM5P')" id="b-DM5P"><div class="spk-dot" style="background:#e8b060"></div><div><div class="spk-name">DM5P</div><div class="spk-spec">90° · 60W · Pendel</div></div></button>
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div class="canvas-area" id="ca">
+  <canvas id="c"></canvas>
+  <div class="mode-bar">
+    <button class="mode-btn active" id="mPlace"  onclick="setMode('place')">PLASSER</button>
+    <button class="mode-btn"        id="mZone"   onclick="setMode('zone')">TEGN SONE</button>
+    <button class="mode-btn"        id="mSelect" onclick="setMode('select')">FLYTT</button>
+    <button class="mode-btn"        id="mPan"    onclick="setMode('pan')">PAN</button>
+    <button class="mode-btn"        id="mCalibrate" onclick="setMode('calibrate')">KALIBRER</button>
+  </div>
+  <div class="canvas-hint" id="hint">Velg høyttaler til venstre, klikk for å plassere</div>
+</div>
+
+<!-- RIGHT: Zones + Speakers + Recs -->
+<div class="right-panel">
+
+  <div>
+    <div class="sec-label">Soner</div>
+    <div id="zoneList"><span class="empty-msg">Ingen soner — bruk «TEGN SONE»</span></div>
+    <button class="add-zone-btn" onclick="addZoneManual()">+ Legg til sone manuelt</button>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="sec-label">Plasserte høyttalere</div>
+    <div id="spkList"><span class="empty-msg">Ingen plassert ennå</span></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="sec-label">Fargeforklaring</div>
+    <div class="legend">
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(200,90,90,.75)"></div>Overlapp / +3 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(120,200,100,.7)"></div>God dekning 0 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(100,160,220,.55)"></div>Kant −3 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(90,90,130,.4)"></div>Svak −6 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(200,60,60,.15)"></div>Dødpunkt</div>
+      <div class="leg-row"><div class="leg-sw" style="border:1px dashed rgba(255,255,255,.3)"></div>Sonegrense</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="sec-label">Forsterker · Prosessor · Soner</div>
+    <div id="recList"><span class="empty-msg">Plasser høyttalere for anbefaling</span></div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const SPK = {
+  // ══════════════════════════════════════════════════════════════════════
+  // ALL SPECS VERIFIED FROM OFFICIAL BOSE PROFESSIONAL DATASHEETS
+  // Sources: boseprofessional.com datasheets, accessed May 2026
+  // ang = Nominal Coverage Angle (1–4 kHz conical, or horizontal for wall/edge)
+  // sens = Sensitivity SPL/1W@1m (dB)
+  // pwr = Long-term power handling (W)
+  // ══════════════════════════════════════════════════════════════════════
+
+  // ── CEILING — DesignMax ────────────────────────────────────────────────
+  // DM2C-LP: 150° conical, 20W, 84dB (TDS 09/2020)
+  DM2C: {name:'DM2C-LP', ang:150,pwr:20, sens:84,color:'#7eb8c8',range:3.0, mount:'ceiling',
+         note:'150° conical · 20W · 84dB · Lavprofil 2.25"'},
+
+  // DM3C: 135° conical, 30W, 83dB (TDS 09/2020)
+  DM3C: {name:'DM3C',    ang:135,pwr:30, sens:83,color:'#7eb8c8',range:4.0, mount:'ceiling',
+         note:'135° conical · 30W · 83dB · 3.5"'},
+
+  // DM5C: 130° conical, 60W, 87dB (TDS 12/2025)
+  DM5C: {name:'DM5C',    ang:130,pwr:60, sens:87,color:'#7eb8c8',range:5.5, mount:'ceiling',
+         note:'130° conical · 60W · 87dB · 5.25"'},
+
+  // DM8C: 135° conical, 150W, 91dB (TDS 04/2023)
+  DM8C: {name:'DM8C',    ang:135,pwr:150,sens:91,color:'#7eb8c8',range:8.0, mount:'ceiling',
+         note:'135° conical · 150W · 91dB · 8" · Foreground'},
+
+  // ── CEILING — EdgeMax ──────────────────────────────────────────────────
+  // EM90: 90° horizontal PhaseGuide, 60W, 89dB (TDS)
+  EM90: {name:'EdgeMax EM90', ang:90, pwr:60, sens:89,color:'#c87e7e',range:6.0, mount:'edge',
+         note:'90° horizontal · 60W · 89dB · Hjørnemontert'},
+
+  // EM180: 180° horizontal PhaseGuide, 60W, 89dB (TDS)
+  EM180:{name:'EdgeMax EM180',ang:180,pwr:60, sens:89,color:'#c87e7e',range:6.0, mount:'edge',
+         note:'180° horizontal · 60W · 89dB · Veggmontert i tak'},
+
+  // ── CEILING — FreeSpace DS (flush-mount) ──────────────────────────────
+  // DS16F: 140° conical, 16W, 84dB (TDS)
+  FS3:  {name:'DS16F (FS)',  ang:140,pwr:16, sens:84,color:'#7ec896',range:3.5, mount:'ceiling',
+         note:'140° conical · 16W · 84dB · Innfelt tak'},
+
+  // DS40F: 125° conical, 40W, 87dB (TDS)
+  FS3F: {name:'DS40F (FS)',  ang:125,pwr:40, sens:87,color:'#7ec896',range:5.0, mount:'ceiling',
+         note:'125° conical · 40W · 87dB · Innfelt tak'},
+
+  // ── SURFACE — DesignMax ───────────────────────────────────────────────
+  // DM5SE: 130° conical, 60W, 90dB (TDS)
+  DM5SE:{name:'DM5SE',ang:130,pwr:60, sens:90,color:'#b87ec8',range:6.0, mount:'wall',
+         note:'130° · 60W · 90dB · Veggmontert 5.25"'},
+
+  // DM8S: 130° conical, 150W, 93dB (TDS 09/2020)
+  DM8S: {name:'DM8S', ang:130,pwr:150,sens:93,color:'#b87ec8',range:9.0, mount:'wall',
+         note:'130° · 150W · 93dB · Veggmontert 8"'},
+
+  // ── SURFACE — FreeSpace DS ────────────────────────────────────────────
+  // DS16F surface: 140° conical, 16W, 84dB
+  DS16F: {name:'DS16F',  ang:140,pwr:16, sens:84,color:'#c8a96e',range:4.0, mount:'wall',
+          note:'140° conical · 16W · 84dB · Veggmontert'},
+
+  // DS40F surface: 125° conical, 40W, 87dB
+  DS40F: {name:'DS40F',  ang:125,pwr:40, sens:87,color:'#c8a96e',range:6.0, mount:'wall',
+          note:'125° conical · 40W · 87dB · Veggmontert'},
+
+  // DS100F: 90° conical, 100W, 90dB (TDS)
+  DS100F:{name:'DS100F', ang:90, pwr:100,sens:90,color:'#c8a96e',range:8.0, mount:'wall',
+          note:'90° conical · 100W · 90dB · Veggmontert'},
+
+  // ── PENDANT — DesignMax ───────────────────────────────────────────────
+  // DM3P: 135° conical, 30W, 83dB (same driver as DM3C)
+  DM3P: {name:'DM3P',ang:135,pwr:30, sens:83,color:'#e8b060',range:4.0, mount:'pendant',
+         note:'135° conical · 30W · 83dB · Pendel'},
+
+  // DM5P: 130° conical, 60W, 87dB (same driver as DM5C)
+  DM5P: {name:'DM5P',ang:130,pwr:60, sens:87,color:'#e8b060',range:5.5, mount:'pendant',
+         note:'130° conical · 60W · 87dB · Pendel'},
+};
+
+const ZONE_COLORS = ['#4a9eff','#ff6b6b','#51cf66','#ffd43b','#cc5de8','#ff922b','#20c997','#f06595'];
+
+const AMPS = [
+  // ═══════════════════════════════════════════════════════════════════════
+  // FORSTERKERE — Bose Professional (verifisert 2025)
+  // totalW = total systemeffekt-kapasitet
+  // For 70/100V: en kanal kan drive mange høyttalere i serie/parallell
+  // Velg basert på: sum av alle høyttaler-tap × 1.25 sikkerhetsmargin
+  // ═══════════════════════════════════════════════════════════════════════
+  {name:'IZA 190-HZ',        totalW:90,   zones:1, ch:1,
+   desc:'1 kanal × 90W. 70/100V. Enkel liten sone, bakgrunnsmusikk.'},
+  {name:'IZA 2120-HZ',       totalW:240,  zones:2, ch:2,
+   desc:'2 kanaler × 120W. 70/100V. Opptil 2 soner, 240W total.'},
+  {name:'IZA 4120-HZ',       totalW:480,  zones:4, ch:4,
+   desc:'4 kanaler × 120W. 70/100V. Opptil 4 soner, 480W total.'},
+  {name:'PowerSpace P2600A', totalW:1200, zones:2, ch:2,
+   desc:'2 kanaler × 600W. 70/100V. Anbefalt for mellomstore anlegg. AmpLink.'},
+  {name:'PowerSpace P4300A', totalW:1200, zones:4, ch:4,
+   desc:'4 kanaler × 300W. 70/100V. 4 soner, 1200W total. AmpLink.'},
+  {name:'PowerSpace+ P4300', totalW:1200, zones:4, ch:4,
+   desc:'4 kanaler × 300W. DSP innebygd. Rask oppsett, nettleserbasert konfig.'},
+  {name:'PowerShare PS404D', totalW:400,  zones:4, ch:4,
+   desc:'400W delt over 4 utganger (PowerShare). Dante. Fleksibel fordeling.'},
+  {name:'PowerShare PS604D', totalW:600,  zones:4, ch:4,
+   desc:'600W delt over 4 utganger (PowerShare). Dante. Full fleksibilitet.'},
+  {name:'PowerShare PS802D', totalW:800,  zones:8, ch:8,
+   desc:'800W delt over 8 utganger (PowerShare). Dante. Store flersone-anlegg.'},
+];
+
+const PROCS=[
+  // ═══════════════════════════════════════════════════════════════════════
+  // PROSESSORER — Bose Professional ControlSpace (verifisert 2025)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Fixed Architecture (CSP) — enkle kommersielle systemer
+  {name:'CSP-428',  ins:4,  outs:4,  conf:false,
+   desc:'Commercial Sound Processor. 4 inn / 4 ut. Bakgrunnsmusikk og enkel paging.'},
+  {name:'CSP-1248', ins:12, outs:8,  conf:false,
+   desc:'Commercial Sound Processor. 12 inn / 8 ut. Multi-sone musikk og paging.'},
+
+  // Open Architecture — fleksible DSP-systemer
+  {name:'ESP-880A', ins:8,  outs:8,  conf:false,
+   desc:'ControlSpace ESP-880A. 8 inn / 8 ut. Anbefalt for kommersielle musikanlegg. AmpLink.'},
+  {name:'EX-1280',  ins:12, outs:8,  conf:false,
+   desc:'ControlSpace EX-1280. 12 inn / 8 ut. Open architecture DSP. Dante. Full fleksibilitet.'},
+
+  // Open Architecture for Conferencing — med AEC
+  {name:'EX-440C',  ins:4,  outs:4,  conf:true,
+   desc:'ControlSpace EX-440C. 4 inn / 4 ut. Konferanseprosessor med AEC. Møterom.'},
+  {name:'EX-12AEC', ins:12, outs:4,  conf:true,
+   desc:'ControlSpace EX-12AEC. 12 inn / 4 ut. Konferanse-signalprosessor med AEC.'},
+  {name:'EX-1280C', ins:12, outs:8,  conf:true,
+   desc:'ControlSpace EX-1280C. 12 inn / 8 ut. Konferanse + Dante. Store hybridrom.'},
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let speakers=[], zones=[], selModel=null, mode='place';
+let selSpk=null, dragSpk=null, dragOff={x:0,y:0};
+let panX=0,panY=0,panStart=null;
+let zoneDrawing=false, zonePt1=null, zonePreview=null;
+let floorImg=null;
+let zoneCounter=0, spkCounter=0;
+let calibPts=[], calibLine=null, floorPixelScale=null;
+
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const area=document.getElementById('ca');
+
+function resize(){ canvas.width=area.clientWidth; canvas.height=area.clientHeight; redraw(); }
+window.addEventListener('resize',resize); resize();
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getRW(){ return +document.getElementById('rW').value; }
+function getSysVolt(){ const el=document.getElementById('sysVolt'); return el?el.value:'100'; }
+function getSpaceType(){ const el=document.getElementById('spaceType'); return el?el.value:'office'; }
+function getRL(){ return +document.getElementById('rL').value; }
+function getRH(){ return +document.getElementById('rH').value; }
+
+function getScale(){
+  const pad=44;
+  return Math.min((canvas.width-pad*2)/getRW(),(canvas.height-pad*2)/getRL());
+}
+function getOff(){
+  const sc=getScale(),rw=getRW(),rl=getRL();
+  return {x:(canvas.width-rw*sc)/2+panX, y:(canvas.height-rl*sc)/2+panY};
+}
+function r2c(rx,ry){ const o=getOff(),sc=getScale(); return {x:o.x+rx*sc,y:o.y+ry*sc}; }
+function c2r(cx,cy){ const o=getOff(),sc=getScale(); return {x:(cx-o.x)/sc,y:(cy-o.y)/sc}; }
+function clamp(v,mn,mx){ return Math.max(mn,Math.min(mx,v)); }
+
+function inZone(rx,ry,z){
+  return rx>=z.x && rx<=z.x+z.w && ry>=z.y && ry<=z.y+z.h;
+}
+
+// ── MODEL SELECTION ───────────────────────────────────────────────────────────
+function sel(id){
+  selModel=id;
+  document.querySelectorAll('.spk-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('b-'+id).classList.add('selected');
+  setMode('place');
+  hint(`${SPK[id].name} valgt — klikk i rommet for å plassere`);
+}
+
+function setMode(m){
+  mode=m;
+  ['Place','Zone','Select','Pan','Calibrate'].forEach(n=>{
+    const el=document.getElementById('m'+n);
+    if(el) el.classList.toggle('active', m===n.toLowerCase());
+  });
+  if(m==='calibrate') hint('Klikk to punkter på plantegningen med kjent avstand, oppgi meter');
+  else if(m==='zone') hint('Klikk og dra for å tegne en sone');
+  else if(m==='select') hint('Klikk og dra høyttalere for å flytte dem. Høyreklikk for å endre retning.');
+  else if(m==='pan') hint('Klikk og dra for å panorere');
+  else hint(selModel ? `${SPK[selModel].name} — klikk for å plassere` : 'Velg høyttaler til venstre');
+}
+
+function hint(t){ document.getElementById('hint').textContent=t; }
+
+// ── ZONES ─────────────────────────────────────────────────────────────────────
+function addZoneManual(){
+  const rw=getRW(), rl=getRL();
+  const z={id:zoneCounter++, name:'Sone '+(zones.length+1),
+    x:rw*0.1, y:rl*0.1, w:rw*0.35, h:rl*0.35,
+    color:ZONE_COLORS[zones.length%ZONE_COLORS.length]};
+  zones.push(z);
+  updateZoneList(); redraw();
+}
+
+function deleteZone(id){
+  zones=zones.filter(z=>z.id!==id);
+  speakers.forEach(s=>{ if(s.zone===id) s.zone=null; });
+  updateZoneList(); updateSpkList(); redraw();
+}
+
+function updateZoneList(){
+  const el=document.getElementById('zoneList');
+  if(!zones.length){ el.innerHTML='<span class="empty-msg">Ingen soner — bruk «TEGN SONE»</span>'; updateRecs(); return; }
+  el.innerHTML=zones.map(z=>{
+    const spksInZone=speakers.filter(s=>s.zone===z.id);
+    const st=calcZoneStats(z);
+    return `<div class="zone-item" id="zi-${z.id}">
+      <div class="zone-header">
+        <div class="zone-color" style="background:${z.color}"></div>
+        <input class="zone-name-input" value="${z.name}" onchange="zones.find(zz=>zz.id===${z.id}).name=this.value;updateRecs()">
+        <span class="zone-del" onclick="deleteZone(${z.id})">×</span>
+      </div>
+      <div class="zone-stats">
+        <div class="zstat"><div class="zstat-val" style="color:${covColor(st.cov)}">${st.cov}%</div><div class="zstat-lbl">Dekning</div></div>
+        <div class="zstat"><div class="zstat-val" style="color:var(--danger)">${st.dead}%</div><div class="zstat-lbl">Dødpunkt</div></div>
+        <div class="zstat"><div class="zstat-val">${spksInZone.length}</div><div class="zstat-lbl">Høyttalere</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  updateRecs();
+}
+
+function covColor(p){ return p>85?'var(--success)':p>65?'var(--accent)':'var(--danger)'; }
+
+function calcZoneStats(z){
+  if(!speakers.length) return {cov:0,dead:100,overlap:0};
+  const res=0.3; // meters per sample
+  let cov=0,dead=0,total=0;
+  for(let rx=z.x;rx<z.x+z.w;rx+=res){
+    for(let ry=z.y;ry<z.y+z.h;ry+=res){
+      total++;
+      const rh=getRH();
+      let covered=false;
+      speakers.forEach(s=>{
+        if(s.zone==null||s.zone!=z.id) return;
+        const sp=SPK[s.model];
+        const dx=rx-s.x,dy=ry-s.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<0.05){covered=true;return;}
+        const halfAngRad=sp.ang/2*Math.PI/180;
+        const coverageR=Math.max(rh-1.5,0.5)*Math.tan(halfAngRad);
+        if(!sp.mount||sp.mount==='ceiling'||sp.mount==='pendant'){
+          if(dist<=coverageR) covered=true;
+        } else if(sp.mount==='edge'){
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=halfAngRad&&dist<=coverageR*1.5) covered=true;
+        } else {
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=halfAngRad&&dist<=sp.range) covered=true;
+        }
+      });
+      if(covered) cov++; else dead++;
+    }
+  }
+  if(!total) return {cov:0,dead:100};
+  return {cov:Math.round(cov/total*100), dead:Math.round(dead/total*100)};
+}
+
+// ── SPEAKERS ──────────────────────────────────────────────────────────────────
+function assignZone(sel){
+  const i = +sel.getAttribute('data-spk-idx');
+  if(i >= 0 && i < speakers.length){
+    speakers[i].zone = sel.value === '' ? null : +sel.value;
+    updateZoneList();
+    redraw();
+  }
+}
+
+function updateSpkList(){
+  updateRecs();
+  const el=document.getElementById('spkList');
+  if(!speakers.length){ el.innerHTML='<span class="empty-msg">Ingen plassert ennå</span>'; return; }
+  el.innerHTML=speakers.map((s,i)=>{
+    const sp=SPK[s.model];
+    const zOpts=zones.map(z=>`<option value="${z.id}" ${s.zone!=null&&s.zone==z.id?'selected':''}>${z.name}</option>`).join('');
+    return `<div class="spk-row ${selSpk===i?'active':''}" onclick="selSpeaker(${i})">
+      <div class="spk-row-header">
+        <div class="spk-dot" style="background:${sp.color};width:7px;height:7px;border-radius:50%;flex-shrink:0"></div>
+        <div class="spk-row-name">${i+1}. ${sp.name}</div>
+        <span class="spk-del2" onclick="event.stopPropagation();delSpk(${i})">×</span>
+      </div>
+      ${(['wall','edge'].includes(SPK[s.model].mount))?`
+      <div class="ctrl-row">
+        <span class="ctrl-label">RETNING</span>
+        <input type="range" min="0" max="359" value="${Math.round(s.dir)}"
+          oninput="speakers[${i}].dir=+this.value;this.nextElementSibling.textContent=this.value+'°';redraw();updateZoneList()">
+        <span class="ctrl-val">${Math.round(s.dir)}°</span>
+      </div>`:'<div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-bottom:3px">Takinnfelt — omnidireksjonell ↓</div>'}
+      <div class="zone-assign">
+        <label>SONE:</label>
+        <select class="spk-zone-sel" data-spk-idx="${i}" onchange="assignZone(this)">
+          <option value="">— ingen —</option>${zOpts}
+        </select>
+      </div>
+      <div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:3px">
+        (${s.x.toFixed(1)}, ${s.y.toFixed(1)}) m · ${sp.ang}° · ${sp.pwr}W
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selSpeaker(i){ selSpk=selSpk===i?null:i; updateSpkList(); redraw(); }
+function delSpk(i){ speakers.splice(i,1); if(selSpk>=speakers.length)selSpk=null; updateSpkList();updateZoneList();redraw(); }
+function startCalib(){
+  calibPts=[];calibLine=null;
+  setMode('calibrate');
+  hint('Klikk punkt A på plantegningen (f.eks. start av en kjent vegg)');
+}
+
+function resetCalib(){
+  calibPts=[];calibLine=null;floorPixelScale=null;
+  document.getElementById('calibStatus').textContent='Ingen kalibrering utført';
+  document.getElementById('calibStatus').style.color='var(--muted)';
+  redraw();
+}
+
+function clearAll(){ speakers=[];zones=[];selSpk=null;zoneCounter=0;calibPts=[];calibLine=null;floorPixelScale=null; updateSpkList();updateZoneList();redraw(); }
+
+// ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
+function buildZoneHtml(){
+  return zones.map(function(z){
+    var sp2=speakers.filter(function(s){return s.zone==z.id;});
+    if(!sp2.length) return '<div style="margin-top:6px;padding:7px;background:rgba(0,0,0,.3);border-left:2px solid '+z.color+';border-radius:0 3px 3px 0"><div style="font-size:10px;color:'+z.color+'">'+z.name+'</div><div style="font-size:9px;color:var(--muted);font-family:var(--mono)">Ingen høyttalere</div></div>';
+    var pw2=sp2.reduce(function(s,x){return s+SPK[x.model].pwr;},0);
+    var st=calcZoneStats(z);
+    return '<div style="margin-top:6px;padding:7px;background:rgba(0,0,0,.3);border-left:2px solid '+z.color+';border-radius:0 3px 3px 0">'
+      +'<div style="font-size:10px;font-weight:600;color:'+z.color+';margin-bottom:2px">'+z.name+'</div>'
+      +'<div style="font-size:9px;color:var(--muted);font-family:var(--mono)">'+sp2.length+' høyttalere · '+pw2+'W · Dekning: <span style="color:'+covColor(st.cov)+'">'+st.cov+'%</span> · Dødpunkt: '+st.dead+'%</div>'
+      +'</div>';
+  }).join('');
+}
+
+function calcRecommendedSpacing(model){
+  const sp=SPK[model]; if(!sp) return null;
+  const effectiveH=Math.max(getRH()-1.5,0.5);
+  const halfAngRad=sp.ang/2*Math.PI/180;
+  const coverageR=effectiveH*Math.tan(halfAngRad);
+  const diameter=coverageR*2;
+  const spaceType=getSpaceType();
+  const overlap=spaceType==='utility'?1.0:0.85;
+  return (diameter*overlap).toFixed(1);
+}
+
+function calcTapRecommendation(model){
+  const sp=SPK[model]; if(!sp||!sp.pwr) return null;
+  const volt=getSysVolt();
+  const spaceType=getSpaceType();
+  const targetSPL=spaceType==='utility'?70:spaceType==='meeting'?72:75;
+  const effectiveH=Math.max(getRH()-1.5,0.5);
+  const avgDist=effectiveH;
+  const splAt1m=sp.sens;
+  const requiredPwr=Math.pow(10,(targetSPL-splAt1m+20*Math.log10(Math.max(avgDist,1)))/10);
+  const taps70=sp.taps70||[1.5,3,6,12,25,50];
+  const taps100=sp.taps100||[2.5,5,10,20,40,80];
+  const taps8=[sp.pwr];
+  let tapList=volt==='70'?taps70:volt==='8ohm'?taps8:taps100;
+  tapList=tapList.filter(t=>t<=sp.pwr);
+  let recTap=tapList[tapList.length-1];
+  for(const t of tapList){
+    const splAtTap=splAt1m+10*Math.log10(t)-20*Math.log10(Math.max(avgDist,1));
+    if(splAtTap>=targetSPL){recTap=t;break;}
+  }
+  const splAtRecTap=(splAt1m+10*Math.log10(recTap)-20*Math.log10(Math.max(avgDist,1))).toFixed(0);
+  return {tap:recTap,spl:splAtRecTap,volt,requiredPwr:requiredPwr.toFixed(1)};
+}
+
+function updateRecs(){
+  const el=document.getElementById('recList');
+  if(!speakers.length){el.innerHTML='<span class="empty-msg">Plasser høyttalere for anbefaling</span>';return;}
+
+  const totalZones=Math.max(1,zones.length);
+  const totalPwr=speakers.reduce((s,sp)=>s+SPK[sp.model].pwr,0);
+  const totalSpk=speakers.length;
+  const volt=getSysVolt();
+  const spaceType=getSpaceType();
+  const hasConf=spaceType==='meeting';  // Only meeting rooms get conference processor
+  const rw=getRW(),rl=getRL();
+  const roomArea=(rw*rl).toFixed(0);
+
+  // Find dominant speaker model
+  const mc={};
+  speakers.forEach(s=>{mc[s.model]=(mc[s.model]||0)+1;});
+  const dom=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  const recSpacing=dom?calcRecommendedSpacing(dom):null;
+  const tapRec=dom?calcTapRecommendation(dom):null;
+
+  // Estimate recommended count for room
+  let recCount='—';
+  if(dom&&recSpacing){
+    const sM=parseFloat(recSpacing);
+    const nx=Math.max(1,Math.ceil(rw/sM)), ny=Math.max(1,Math.ceil(rl/sM));
+    recCount=nx+'×'+ny+' = '+(nx*ny)+' stk';
+  }
+
+  // For 70/100V: select by total system power capacity, not channel count
+  // Speaker tap watts are typically 2.5-40W each, not rated power
+  // Estimate tap power: assume average 10W tap per speaker (conservative)
+  const estimatedTapPwr = totalSpk * 10; // ~10W tap per speaker avg
+  const amp=AMPS.find(a=>a.totalW>=estimatedTapPwr*1.25&&a.zones>=totalZones)||AMPS[AMPS.length-1];
+  const proc=hasConf
+    ? (PROCS.find(p=>p.conf&&p.outs>=totalZones)||PROCS[5])
+    : (PROCS.find(p=>!p.conf&&p.outs>=totalZones)||PROCS[4]);
+
+  const spL={office:'Kontor/landskap',meeting:'Møterom',reception:'Resepsjon',utility:'Servicerom'};
+  const effH=Math.max(getRH()-1.5,0.5).toFixed(1);
+  const targetSPL=spaceType==='utility'?70:spaceType==='meeting'?72:75;
+
+  el.innerHTML=`
+    <div style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:8px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:7px;letter-spacing:.1em">PLASSERING</div>
+      ${recSpacing?`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px">
+        <div style="background:rgba(200,169,110,.1);border:1px solid rgba(200,169,110,.25);border-radius:3px;padding:8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:18px;font-weight:500;color:var(--accent)">${recSpacing} m</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Maks avstand</div>
+        </div>
+        <div style="background:rgba(126,184,200,.1);border:1px solid rgba(126,184,200,.25);border-radius:3px;padding:8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent2)">${recCount}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Anbefalt antall</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);font-family:var(--mono);line-height:1.6">
+        Lyttehøyde 1.5m · Takavstand: ${effH}m · ${spL[spaceType]||spaceType}
+      </div>`:''}
+    </div>
+    ${tapRec?`
+    <div style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:8px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:7px;letter-spacing:.1em">TRANSFORMER-TAP — ${volt}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px">
+        <div style="background:rgba(126,196,150,.1);border:1px solid rgba(126,196,150,.25);border-radius:3px;padding:7px;text-align:center">
+          <div style="font-family:var(--mono);font-size:17px;font-weight:500;color:var(--success)">${tapRec.tap}W</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Anbefalt tap</div>
+        </div>
+        <div style="background:rgba(200,169,110,.08);border:1px solid rgba(200,169,110,.2);border-radius:3px;padding:7px;text-align:center">
+          <div style="font-family:var(--mono);font-size:17px;font-weight:500;color:var(--accent)">${tapRec.spl} dB</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">SPL @ 1.5m</div>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:3px;padding:7px;text-align:center">
+          <div style="font-family:var(--mono);font-size:17px;font-weight:500;color:var(--text)">${tapRec.requiredPwr}W</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Krav per stk</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);font-family:var(--mono);line-height:1.5">
+        Mål: ${targetSPL} dB(A) · ${volt} system<br>
+        <span style="color:rgba(200,169,110,.5)">Verifiser mot tap-chart i datablad</span>
+      </div>
+    </div>`:''}
+    <div class="rec-box" style="margin-bottom:8px">
+      <div class="rec-badge">FORSTERKER</div>
+      <div class="rec-name">${amp.name}</div>
+      <div class="rec-reason">${amp.desc}</div>
+      <div class="rec-meta">${totalSpk} høyttalere · ${totalPwr}W · ${totalZones} sone${totalZones>1?'r':''}</div>
+    </div>
+    <div class="rec-box" style="margin-bottom:8px">
+      <div class="rec-badge">PROSESSOR</div>
+      <div class="rec-name">${proc.name}</div>
+      <div class="rec-reason">${proc.desc}</div>
+      <div class="rec-meta">${proc.ins} inn / ${proc.outs} ut${proc.conf?' · AEC':''}</div>
+    </div>
+    ${zones.length ? buildZoneHtml() : ''}
+    <div style="margin-top:8px;padding:8px;background:rgba(0,0,0,.2);border-radius:4px;font-size:9px;font-family:var(--mono);color:var(--muted);line-height:1.8">
+      <span style="color:var(--text);font-size:10px;display:block;margin-bottom:2px">Systemsammendrag</span>
+      ${rw}×${rl}m · ${roomArea}m² · Tak ${getRH()}m<br>
+      ${totalSpk} høyttalere · ${totalPwr}W · ${Math.max(1,zones.length)} sone${zones.length>1?'r':''}
+    </div>`;
+}
+
+// ── DRAW ──────────────────────────────────────────────────────────────────────
+function redraw(){
+  const rw=getRW(),rl=getRL(),sc=getScale();
+  const o=getOff();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Floor
+  ctx.fillStyle='#0d0d0d';
+  ctx.fillRect(o.x,o.y,rw*sc,rl*sc);
+
+  if(floorImg){
+    ctx.globalAlpha=.3;
+    ctx.drawImage(floorImg,o.x,o.y,rw*sc,rl*sc);
+    ctx.globalAlpha=1;
+  }
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=.5;
+  for(let x=0;x<=rw;x++){
+    ctx.beginPath();ctx.moveTo(o.x+x*sc,o.y);ctx.lineTo(o.x+x*sc,o.y+rl*sc);ctx.stroke();
+  }
+  for(let y=0;y<=rl;y++){
+    ctx.beginPath();ctx.moveTo(o.x,o.y+y*sc);ctx.lineTo(o.x+rw*sc,o.y+y*sc);ctx.stroke();
+  }
+
+  // Calibration line overlay
+  if(calibPts.length>=1){
+    calibPts.forEach((p,i)=>{
+      ctx.beginPath();ctx.arc(p.cx,p.cy,6,0,Math.PI*2);
+      ctx.fillStyle='#ffdd44';ctx.strokeStyle='#000';ctx.lineWidth=1.5;
+      ctx.fill();ctx.stroke();
+      ctx.fillStyle='#ffdd44';ctx.font='bold 10px DM Mono,monospace';ctx.textAlign='left';
+      ctx.fillText(i===0?'A':'B',p.cx+8,p.cy-4);
+    });
+    if(calibPts.length===2){
+      ctx.beginPath();ctx.moveTo(calibPts[0].cx,calibPts[0].cy);
+      ctx.lineTo(calibPts[1].cx,calibPts[1].cy);
+      ctx.strokeStyle='#ffdd44';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+      ctx.stroke();ctx.setLineDash([]);
+      if(floorPixelScale){
+        const mx=(calibPts[0].cx+calibPts[1].cx)/2;
+        const my=(calibPts[0].cy+calibPts[1].cy)/2;
+        const pxDist=Math.sqrt((calibPts[1].cx-calibPts[0].cx)**2+(calibPts[1].cy-calibPts[0].cy)**2);
+        const mDist=(pxDist/floorPixelScale).toFixed(2);
+        ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(mx-30,my-16,62,18);
+        ctx.fillStyle='#ffdd44';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';
+        ctx.fillText(mDist+' m',mx,my-3);
+      }
+    }
+  }
+
+  // Calibration preview line while moving mouse
+  if(calibLine&&calibPts.length===1){
+    ctx.beginPath();ctx.moveTo(calibPts[0].cx,calibPts[0].cy);
+    ctx.lineTo(calibLine.cx,calibLine.cy);
+    ctx.strokeStyle='rgba(255,221,68,.5)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    ctx.stroke();ctx.setLineDash([]);
+  }
+
+  // Zones background
+  zones.forEach(z=>{
+    const hex=z.color, r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    ctx.fillStyle=`rgba(${r},${g},${b},0.05)`;
+    ctx.fillRect(o.x+z.x*sc,o.y+z.y*sc,z.w*sc,z.h*sc);
+  });
+
+  // Coverage heatmap
+  drawHeatmap(o,rw,rl,sc);
+
+  // Zone borders
+  zones.forEach(z=>{
+    const hex=z.color,r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    ctx.strokeStyle=`rgba(${r},${g},${b},0.7)`;
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([5,4]);
+    ctx.strokeRect(o.x+z.x*sc,o.y+z.y*sc,z.w*sc,z.h*sc);
+    ctx.setLineDash([]);
+    // Zone label
+    ctx.fillStyle=`rgba(${r},${g},${b},0.9)`;
+    ctx.font='bold 10px DM Mono,monospace';
+    ctx.textAlign='left';
+    ctx.fillText(z.name,o.x+z.x*sc+5,o.y+z.y*sc+14);
+  });
+
+  // Zone preview while drawing
+  if(zoneDrawing&&zonePt1&&zonePreview){
+    const x1=Math.min(zonePt1.x,zonePreview.x),y1=Math.min(zonePt1.y,zonePreview.y);
+    const x2=Math.max(zonePt1.x,zonePreview.x),y2=Math.max(zonePt1.y,zonePreview.y);
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.strokeRect(o.x+x1*sc,o.y+y1*sc,(x2-x1)*sc,(y2-y1)*sc);
+    ctx.setLineDash([]);
+  }
+
+  // Room border
+  ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=1.5;
+  ctx.strokeRect(o.x,o.y,rw*sc,rl*sc);
+
+  // Dimension labels
+  ctx.fillStyle='rgba(255,255,255,.3)';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';
+  ctx.fillText(rw+'m',o.x+rw*sc/2,o.y-7);
+  ctx.save();ctx.translate(o.x-10,o.y+rl*sc/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText(rl+'m',0,0);ctx.restore();
+
+  // Speakers
+  speakers.forEach((s,i)=>{
+    const sp=SPK[s.model];
+    const p=r2c(s.x,s.y);
+    const dir=s.dir*Math.PI/180;
+    const halfAngRad=sp.ang/2*Math.PI/180;
+    const effectiveH=Math.max(getRH()-1.5,0.5);
+    const coverageR=effectiveH*Math.tan(halfAngRad);
+    const sc=getScale();
+
+    if(sp.mount==='sub'){
+      // Subwoofer: vis kun et rundt ikon med SUB-tekst, ingen dekningssirkel
+      ctx.beginPath();ctx.arc(p.x,p.y,9,0,Math.PI*2);
+      ctx.fillStyle='#555';ctx.strokeStyle=sp.color;ctx.lineWidth=2;
+      ctx.fill();ctx.stroke();
+      ctx.fillStyle=sp.color;ctx.font='bold 7px DM Mono,monospace';ctx.textAlign='center';
+      ctx.fillText('SUB',p.x,p.y+2.5);
+      return; // skip normal drawing below
+    } else if(!sp.mount||sp.mount==='ceiling'||sp.mount==='pendant'){
+      // Show circle outline clipped to room boundaries
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(o.x, o.y, rw*sc, rl*sc);
+      ctx.clip();
+      ctx.beginPath();ctx.arc(p.x,p.y,coverageR*sc,0,Math.PI*2);
+      ctx.strokeStyle=sp.color+'88';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+      ctx.stroke();ctx.setLineDash([]);
+      ctx.restore();
+    } else {
+      // Directional arrow for wall/edge
+      ctx.strokeStyle=sp.color;ctx.lineWidth=1.5;ctx.setLineDash([3,3]);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+      ctx.lineTo(p.x+Math.cos(dir)*16,p.y+Math.sin(dir)*16);
+      ctx.stroke();ctx.setLineDash([]);
+    }
+
+    // Dot
+    const isSel=selSpk===i;
+    ctx.beginPath();ctx.arc(p.x,p.y,isSel?9:7,0,Math.PI*2);
+    ctx.fillStyle=isSel?'#fff':sp.color;ctx.strokeStyle=isSel?sp.color:'rgba(0,0,0,.5)';
+    ctx.lineWidth=isSel?2:1;ctx.fill();ctx.stroke();
+
+    ctx.fillStyle=isSel?sp.color:'#fff';
+    ctx.font='bold 8px DM Mono,monospace';ctx.textAlign='center';
+    ctx.fillText(i+1,p.x,p.y+3);
+
+    // Zone dot indicator
+    if(s.zone!==null){
+      const z=zones.find(zz=>zz.id===s.zone);
+      if(z){
+        ctx.beginPath();ctx.arc(p.x+8,p.y-8,3,0,Math.PI*2);
+        ctx.fillStyle=z.color;ctx.fill();
+      }
+    }
+  });
+}
+
+function drawHeatmap(o,rw,rl,sc){
+  if(!speakers.length) return;
+  // Clip all heatmap rendering strictly to room rectangle
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(o.x, o.y, rw*sc, rl*sc);
+  ctx.clip();
+  const res=4;
+  const cols=Math.ceil(rw*sc/res), rows=Math.ceil(rl*sc/res);
+  const rh=getRH();
+
+  for(let ci=0;ci<cols;ci++){
+    for(let ri=0;ri<rows;ri++){
+      const px=o.x+ci*res+res/2, py=o.y+ri*res+res/2;
+      const rx=(px-o.x)/sc, ry=(py-o.y)/sc;
+      if(rx<0||rx>rw||ry<0||ry>rl) continue;
+
+      let dbLin=-Infinity, contribs=0;
+
+      speakers.forEach(s=>{
+        const sp=SPK[s.model];
+        const dx=rx-s.x,dy=ry-s.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<0.05) return;
+
+        // Coverage radius at ear height (1.5m) = (takhøyde - 1.5m) * tan(half_angle)
+        // Bose standard: listener height 1.5m (standing)
+        const LISTENER_H = 1.5;
+        const halfAngRad = sp.ang/2 * Math.PI/180;
+        const effectiveH = Math.max(rh - LISTENER_H, 0.5); // height from speaker to ear
+        const coverageR = effectiveH * Math.tan(halfAngRad);
+
+        let inCoverage = false;
+        let rolloff = 0;
+
+        if(!sp.mount||sp.mount==='ceiling'||sp.mount==='pendant'){
+          // Omnidirectional cone: circular coverage on floor
+          // Coverage degrades toward the edge of the circle
+          if(dist <= coverageR){
+            inCoverage = true;
+            rolloff = Math.pow(dist/coverageR, 2) * 6; // 0 dB center, -6 dB edge
+          }
+        } else if(sp.mount==='edge'){
+          // EdgeMax: semicircular from wall edge, directed by s.dir
+          // Coverage is a wide arc (ang degrees) from the mounting point
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=halfAngRad && dist<=coverageR*1.5){
+            inCoverage=true;
+            rolloff=Math.pow(Math.abs(df)/halfAngRad,1.5)*4+Math.pow(dist/(coverageR*1.5),2)*3;
+          }
+        } else {
+          // wall mount: directional sector (horizontal projection)
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          const wallRange = sp.range;
+          if(Math.abs(df)<=halfAngRad && dist<=wallRange){
+            inCoverage=true;
+            rolloff=Math.pow(Math.abs(df)/halfAngRad,2)*6+Math.pow(dist/wallRange,2)*3;
+          }
+        }
+
+        if(!inCoverage) return;
+
+        const d3d=Math.sqrt(dist*dist+effectiveH*effectiveH);
+        const spl=sp.sens-20*Math.log10(Math.max(d3d,.5))-rolloff;
+        const lin=Math.pow(10,spl/10);
+        dbLin=dbLin===-Infinity?lin:dbLin+lin;
+        contribs++;
+      });
+
+      // Determine if point is inside any zone (for zone-specific rendering)
+      const inAnyZone = zones.length === 0 || zones.some(z => inZone(rx,ry,z));
+
+      if(dbLin===-Infinity){
+        if(inAnyZone){
+          ctx.fillStyle='rgba(200,60,60,.13)';
+          ctx.fillRect(px-res/2,py-res/2,res,res);
+        }
+        continue;
+      }
+
+      // Only render coverage where there are speakers assigned to the zone the point is in
+      if(zones.length > 0 && !inAnyZone) continue;
+
+      const db=10*Math.log10(dbLin);
+      let r,g,b,a;
+      if(contribs>1&&db>86){r=200;g=90; b=90; a=.72;}
+      else if(db>83)       {r=100;g=210;b=90; a=.68;}
+      else if(db>80)       {r=80; g=150;b=230;a=.52;}
+      else                 {r=80; g=80; b=120;a=.38;}
+      ctx.fillStyle=`rgba(${r},${g},${b},${a})`;
+      ctx.fillRect(px-res/2,py-res/2,res,res);
+    }
+  }
+  ctx.restore(); // end room clip
+}
+
+// ── CANVAS EVENTS ─────────────────────────────────────────────────────────────
+function getCanvasXY(e){
+  const rect=canvas.getBoundingClientRect();
+  return {cx:(e.clientX-rect.left)*(canvas.width/rect.width),
+          cy:(e.clientY-rect.top)*(canvas.height/rect.height)};
+}
+
+canvas.addEventListener('mousedown',e=>{
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+
+  if(mode==='calibrate'){
+    calibPts.push({cx,cy});
+    if(calibPts.length===2){
+      const pxDist=Math.sqrt((calibPts[1].cx-calibPts[0].cx)**2+(calibPts[1].cy-calibPts[0].cy)**2);
+      // Show input dialog
+      const known=parseFloat(prompt('Avstand mellom punkt A og B i meter:\n(Mål f.eks. en kjent vegg på plantegningen)', ''));
+      if(!isNaN(known)&&known>0){
+        floorPixelScale=pxDist/known;
+
+        if(floorImg){
+          // Calculate canvas pixels per meter using calibration
+          // The floor image is drawn at canvas size: rw*scale x rl*scale
+          // But we need to find pixels-per-meter in the CANVAS coordinate space
+          // canvasPxPerMeter = floorPixelScale (canvas px / real meter)
+
+          // Auto-calculate room dimensions from floor image aspect ratio + calibration
+          // floorImg is rendered to fill rW x rL in room coords
+          // Canvas pixels per room-meter = getScale()
+          // But calibration gives us canvas pixels per real meter directly
+          // So: 1 real meter = floorPixelScale canvas pixels
+          // Room width in real meters = canvas room width in pixels / floorPixelScale
+          const canvasRoomW = canvas.width - 88; // approx canvas room pixel width
+          const canvasRoomH = canvas.height - 88;
+          const imgAspect = floorImg.naturalWidth / floorImg.naturalHeight;
+          
+          // Use calibration to set room size based on image aspect + known scale
+          // The image is drawn as: width=rW*sc, height=rL*sc
+          // sc = min((canvas.width-88)/rW, (canvas.height-88)/rL)
+          // We know: floorPixelScale px = 1 meter in canvas coords
+          // So room width = (canvas room px width) / floorPixelScale
+          // But canvas room px = rW * sc, and sc depends on rW/rL...
+          // Simpler: use the image native resolution
+          // floorImg natural pixels / floorPixelScale_in_image_coords
+          // Image is rendered at scale 3.0 for PDF, so native px = 3x real
+          // For PNG: native px = screen px at upload resolution
+
+          // BEST APPROACH: use the two calibration points directly
+          // pxDist = distance in canvas pixels between A and B = known meters
+          // So: canvasPxPerMeter = pxDist / known
+          // Room width in canvas px = canvas.width - 2*pad (approx)
+          // But we need actual room pixel extents
+          // Use: roomWidth = (image_width_in_canvas_px) / canvasPxPerMeter
+          
+          // The image is drawn at: drawImage(floorImg, o.x, o.y, rw*sc, rl*sc)
+          // So image canvas width = rw*sc, image canvas height = rl*sc
+          // We need to figure out rw*sc from canvas layout
+          // Since we don't know exact image extents without knowing rw,
+          // use aspect ratio of the image + one known dimension
+
+          // Calculate: the calibration line is pxDist pixels = known meters
+          // So 1 meter = pxDist/known canvas pixels
+          // Image is drawn to fill rW*sc x rL*sc
+          // Image aspect = naturalWidth/naturalHeight
+          // If image fills full canvas room area:
+          // pxPerMeter: canvas pixels per real meter
+          const pxPerMeter = pxDist / known;
+
+          // Ask user for total room dimensions directly
+          // This avoids pixel-calculation errors from image margins/borders
+          const rWinput = parseFloat(prompt(
+            `Kalibrert: ${known}m = ${pxDist.toFixed(0)}px (${pxPerMeter.toFixed(1)} px/m)\n\nOppgi total BREDDE på rommet/bygget i meter:`,
+            getRW()
+          ));
+          if(isNaN(rWinput)||rWinput<=0){ calibPts=[];redraw();return; }
+
+          const rLinput = parseFloat(prompt(
+            `Oppgi total DYBDE på rommet/bygget i meter:`,
+            getRL()
+          ));
+          if(isNaN(rLinput)||rLinput<=0){ calibPts=[];redraw();return; }
+
+          const newRW = rWinput;
+          const newRL = rLinput;
+
+          document.getElementById('rW').value = newRW.toFixed(2);
+          document.getElementById('rL').value = newRL.toFixed(2);
+          
+          document.getElementById('rW').value = newRW.toFixed(2);
+          document.getElementById('rL').value = newRL.toFixed(2);
+          
+          // Clear existing speakers/zones since scale changed
+          if(speakers.length > 0 || zones.length > 0){
+            if(confirm(`Romstørrelse satt til ${newRW.toFixed(1)}×${newRL.toFixed(1)}m.\nNullstill eksisterende høyttalere og soner?`)){
+              speakers=[]; zones=[]; updateSpkList(); updateZoneList();
+            }
+          }
+
+          const status=document.getElementById('floorStatus');
+          status.textContent=`Kalibrert: ${pxPerMeter.toFixed(1)} px/m · Rom: ${newRW.toFixed(1)}×${newRL.toFixed(1)}m`;
+          const cs=document.getElementById('calibStatus');
+          if(cs){ cs.textContent=`✓ ${known}m ref · Rom ${newRW.toFixed(1)}×${newRL.toFixed(1)}m`; cs.style.color='var(--success)'; }
+          const imgW_m = (floorImg.naturalWidth / (floorImg.naturalWidth/getRW()*sc) ) ;
+          hint(`✓ Kalibrert! ${known}m = ${pxDist.toFixed(0)}px. Juster romstørrelse om nødvendig.`);
+        }
+        setMode('place');
+      } else {
+        calibPts.pop(); // remove second point if cancelled
+      }
+    }
+    redraw();
+    return;
+  }
+  if(mode==='zone'){
+    zoneDrawing=true; zonePt1={x:rp.x,y:rp.y}; zonePreview={x:rp.x,y:rp.y};
+    return;
+  }
+  if(mode==='select'){
+    let found=null;
+    speakers.forEach((s,i)=>{
+      if(Math.sqrt((s.x-rp.x)**2+(s.y-rp.y)**2)<0.8) found=i;
+    });
+    if(found!==null){
+      dragSpk=found; selSpk=found;
+      const p=r2c(speakers[found].x,speakers[found].y);
+      dragOff={x:cx-p.x,y:cy-p.y};
+      updateSpkList();
+    }
+    return;
+  }
+  if(mode==='pan'){ panStart={x:e.clientX-panX,y:e.clientY-panY}; return; }
+});
+
+canvas.addEventListener('mousemove',e=>{
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+
+  if(mode==='calibrate'&&calibPts.length===1){ calibLine={cx,cy}; redraw(); return; }
+  if(zoneDrawing&&zonePt1){ zonePreview={x:rp.x,y:rp.y}; redraw(); return; }
+  if(dragSpk!==null){
+    const nrp=c2r(cx-dragOff.x,cy-dragOff.y);
+    speakers[dragSpk].x=clamp(nrp.x,0,getRW());
+    speakers[dragSpk].y=clamp(nrp.y,0,getRL());
+    updateSpkList();updateZoneList();redraw();
+    return;
+  }
+  if(panStart){ panX=e.clientX-panStart.x;panY=e.clientY-panStart.y;redraw();return; }
+
+  if(mode==='place'&&selModel){
+    if(rp.x>=0&&rp.x<=getRW()&&rp.y>=0&&rp.y<=getRL())
+      hint(`${SPK[selModel].name} → (${rp.x.toFixed(2)}, ${rp.y.toFixed(2)}) m`);
+  }
+});
+
+canvas.addEventListener('mouseup',e=>{
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+
+  if(zoneDrawing&&zonePt1){
+    zoneDrawing=false;
+    const x1=Math.min(zonePt1.x,rp.x),y1=Math.min(zonePt1.y,rp.y);
+    const x2=Math.max(zonePt1.x,rp.x),y2=Math.max(zonePt1.y,rp.y);
+    if((x2-x1)>0.5&&(y2-y1)>0.5){
+      zones.push({id:zoneCounter++,name:'Sone '+(zones.length+1),
+        x:x1,y:y1,w:x2-x1,h:y2-y1,
+        color:ZONE_COLORS[zones.length%ZONE_COLORS.length]});
+      updateZoneList();
+    }
+    zonePt1=null;zonePreview=null;redraw();
+    return;
+  }
+  dragSpk=null; panStart=null;
+});
+
+canvas.addEventListener('click',e=>{
+  if(mode!=='place'||!selModel) return;
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+  if(rp.x<0||rp.x>getRW()||rp.y<0||rp.y>getRL()) return;
+
+  // Auto-detect zone
+  const autoZone=zones.find(z=>inZone(rp.x,rp.y,z));
+  // Default direction toward center
+  const dir=Math.atan2(getRL()/2-rp.y,getRW()/2-rp.x)*180/Math.PI;
+
+  speakers.push({id:spkCounter++,model:selModel,x:rp.x,y:rp.y,dir,zone:autoZone?autoZone.id:null});
+  updateSpkList();updateZoneList();redraw();
+});
+
+canvas.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  if(selSpk===null) return;
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+  speakers[selSpk].dir=Math.atan2(rp.y-speakers[selSpk].y,rp.x-speakers[selSpk].x)*180/Math.PI;
+  updateSpkList();redraw();
+});
+
+// ── FLOOR PLAN ────────────────────────────────────────────────────────────────
+function loadFloor(e){
+  const file=e.target.files[0]; if(!file) return;
+  const status=document.getElementById('floorStatus');
+
+  if(file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf')){
+    status.textContent='Laster PDF...';
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      try{
+        if(typeof pdfjsLib==='undefined') throw new Error('PDF.js ikke tilgjengelig — last opp som PNG/JPG i stedet');
+        // Disable worker to avoid cross-origin issues when running locally
+        pdfjsLib.GlobalWorkerOptions.workerSrc='';
+        const loadTask=pdfjsLib.getDocument({data:ev.target.result, disableWorker:true, disableRange:true, disableStream:true});
+        const pdf=await loadTask.promise;
+        const page=await pdf.getPage(1);
+        // Adaptive scale: target max 4000px on longest side for good quality
+        const rawVp=page.getViewport({scale:1.0});
+        const maxPx=4000;
+        const adaptScale=Math.min(maxPx/Math.max(rawVp.width,rawVp.height), 4.0);
+        const viewport=page.getViewport({scale:adaptScale});
+        const offCanvas=document.createElement('canvas');
+        offCanvas.width=viewport.width; offCanvas.height=viewport.height;
+        await page.render({canvasContext:offCanvas.getContext('2d'),viewport}).promise;
+        floorImg=new Image();
+        floorImg.onload=()=>{status.textContent=`PDF lastet · ${viewport.width}×${viewport.height}px · skala ${adaptScale.toFixed(1)}x`;document.getElementById('calibBtn').style.display='inline-block';document.getElementById('mCalibrate').style.display='inline-block';document.getElementById('calibSection').style.display='block';redraw();};
+        floorImg.src=offCanvas.toDataURL('image/png');
+      }catch(err){
+        console.error('PDF load error:', err);
+        // Try alternative approach: use object URL directly for simpler PDFs
+        status.textContent='⚠ PDF laster ikke direkte. Ta skjermbilde og last opp som PNG.';
+        status.style.color='var(--danger)';
+        document.getElementById('calibSection').style.display='block';
+        // Show helper button
+        const helpBtn=document.createElement('button');
+        helpBtn.className='btn';
+        helpBtn.style.marginTop='6px';
+        helpBtn.textContent='Last opp PNG/JPG i stedet';
+        helpBtn.onclick=()=>{ document.getElementById('pdfInput').accept='image/*'; document.getElementById('pdfInput').click(); };
+        status.parentNode.appendChild(helpBtn);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    floorImg=new Image();
+    floorImg.onload=()=>{status.textContent=`Bilde lastet (${floorImg.width}×${floorImg.height}px)`;document.getElementById('calibBtn').style.display='inline-block';document.getElementById('mCalibrate').style.display='inline-block';document.getElementById('calibSection').style.display='block';redraw();};
+    floorImg.src=URL.createObjectURL(file);
+  }
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────────
+function exportReport(){
+  let txt=`BOSE DEKNINGSRAPPORT\n${'═'.repeat(44)}\n`;
+  txt+=`Rom: ${getRW()}×${getRL()}m · Takhøyde: ${getRH()}m\n`;
+  txt+=`Høyttalere totalt: ${speakers.length} · Soner: ${zones.length}\n\n`;
+
+  zones.forEach(z=>{
+    const sp=speakers.filter(s=>s.zone===z.id);
+    const st=calcZoneStats(z);
+    txt+=`SONE: ${z.name}\n${'─'.repeat(30)}\n`;
+    txt+=`  Størrelse: ${z.w.toFixed(1)}×${z.h.toFixed(1)}m\n`;
+    txt+=`  Dekning: ${st.cov}% · Dødpunkt: ${st.dead}%\n`;
+    txt+=`  Høyttalere:\n`;
+    sp.forEach((s,i)=>{const m=SPK[s.model];txt+=`    ${i+1}. ${m.name} @ (${s.x.toFixed(2)},${s.y.toFixed(2)})m · ${Math.round(s.dir)}° · ${m.pwr}W\n`;});
+    txt+='\n';
+  });
+
+  const sWithoutZone=speakers.filter(s=>s.zone===null);
+  if(sWithoutZone.length){
+    txt+=`UTEN SONE:\n`;
+    sWithoutZone.forEach((s,i)=>{const m=SPK[s.model];txt+=`  ${i+1}. ${m.name} @ (${s.x.toFixed(2)},${s.y.toFixed(2)})m\n`;});
+    txt+='\n';
+  }
+
+  const totalPwr=speakers.reduce((s,x)=>s+SPK[x.model].pwr,0);
+  const amp=AMPS.find(a=>a.ch>=speakers.length&&a.zones>=zones.length&&a.wCh*a.ch>=totalPwr*1.2)||AMPS[AMPS.length-1];
+  const proc=PROCS.find(p=>p.outs>=zones.length)||PROCS[3];
+  txt+=`ANBEFALT UTSTYR\n${'─'.repeat(30)}\n`;
+  txt+=`  Forsterker: ${amp.name}\n  ${amp.desc}\n\n`;
+  txt+=`  Prosessor: ${proc.name}\n  ${proc.desc}\n`;
+
+  const a=document.createElement('a');
+  a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(txt);
+  a.download='bose_dekningsrapport.txt';a.click();
+}
+
+redraw();
+</script>
+</body>
+</html>!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bose Coverage Simulator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// Fallback: if pdf.js CDN fails, try alternative
+window.addEventListener('error', function(e){
+  if(e.filename && e.filename.includes('pdf.min.js')){
+    var s=document.createElement('script');
+    s.src='https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
+    document.head.appendChild(s);
+  }
+}, true);
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+  :root {
+    --bg:#0f0f0f; --surface:#1a1a1a; --surface2:#222; --border:#2e2e2e;
+    --text:#e8e8e8; --muted:#666; --accent:#c8a96e; --accent2:#7eb8c8;
+    --danger:#c87e7e; --success:#7ec896; --warn:#c8b47e;
+    --mono:'DM Mono',monospace; --sans:'DM Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;
+    display:grid;grid-template-rows:46px 1fr;grid-template-columns:280px 1fr 290px;overflow:hidden}
+
+  header{grid-column:1/-1;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 16px;gap:14px}
+  header h1{font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);font-family:var(--mono)}
+  .hdr-sep{color:var(--border);font-size:18px}
+  .hdr-actions{margin-left:auto;display:flex;gap:6px}
+  .btn{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:3px;
+    border:1px solid var(--border);background:var(--surface2);color:var(--text);
+    cursor:pointer;transition:all .12s;letter-spacing:.04em}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.active{background:var(--accent);color:#0f0f0f;border-color:var(--accent);font-weight:600}
+  .btn.danger{border-color:var(--danger);color:var(--danger)}
+  .btn.success{border-color:var(--success);color:var(--success)}
+
+  /* PANELS */
+  .left-panel,.right-panel{background:var(--surface);overflow-y:auto;padding:14px;
+    display:flex;flex-direction:column;gap:16px}
+  .left-panel{border-right:1px solid var(--border)}
+  .right-panel{border-left:1px solid var(--border)}
+  .sec-label{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .sec-label::after{content:'';flex:1;height:1px;background:var(--border)}
+  hr{border:none;border-top:1px solid var(--border)}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field label{font-size:9px;color:var(--muted);font-family:var(--mono);letter-spacing:.06em}
+  .field input,.field select{background:var(--surface2);border:1px solid var(--border);
+    color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 7px;border-radius:3px;width:100%}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;gap:8px}
+
+  /* Mode bar */
+  .mode-bar{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    display:flex;gap:3px;background:rgba(10,10,10,.92);border:1px solid var(--border);
+    border-radius:4px;padding:3px;z-index:20}
+  .mode-btn{font-family:var(--mono);font-size:9px;padding:4px 9px;border-radius:2px;
+    border:none;background:transparent;color:var(--muted);cursor:pointer;
+    transition:all .12s;letter-spacing:.06em}
+  .mode-btn:hover{color:var(--text)}
+  .mode-btn.active{background:var(--accent);color:#0f0f0f;font-weight:600}
+
+  /* Canvas */
+  .canvas-area{position:relative;background:#0a0a0a;overflow:hidden}
+  canvas{display:block}
+  .canvas-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.75);color:var(--muted);font-size:10px;font-family:var(--mono);
+    padding:4px 12px;border-radius:2px;pointer-events:none;white-space:nowrap;z-index:10}
+
+  /* Speaker buttons */
+  .cat-title{font-size:9px;color:var(--muted);font-family:var(--mono);padding:6px 0 3px;
+    text-transform:uppercase;letter-spacing:.1em}
+  .spk-btn{display:flex;align-items:center;gap:7px;width:100%;padding:6px 9px;
+    margin-bottom:2px;background:var(--surface2);border:1px solid transparent;
+    border-radius:3px;cursor:pointer;transition:all .1s;text-align:left;color:var(--text);
+    font-family:var(--sans);font-size:11px}
+  .spk-btn:hover{border-color:var(--border)}
+  .spk-btn.selected{border-color:var(--accent);background:rgba(200,169,110,.08)}
+  .spk-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .spk-name{font-size:11px;font-weight:500}
+  .spk-spec{font-size:9px;color:var(--muted);font-family:var(--mono)}
+
+  /* Zone list */
+  .zone-item{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+    padding:9px 11px;margin-bottom:5px;cursor:pointer;transition:border-color .12s}
+  .zone-item:hover,.zone-item.active{border-color:var(--accent)}
+  .zone-header{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .zone-color{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+  .zone-name-input{background:transparent;border:none;color:var(--text);font-family:var(--sans);
+    font-size:12px;font-weight:500;width:120px;padding:0;cursor:pointer}
+  .zone-name-input:focus{outline:none;border-bottom:1px solid var(--accent);cursor:text}
+  .zone-del{margin-left:auto;cursor:pointer;color:var(--muted);font-size:15px;line-height:1}
+  .zone-del:hover{color:var(--danger)}
+  .zone-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:6px}
+  .zstat{background:rgba(0,0,0,.3);border-radius:3px;padding:4px 6px;text-align:center}
+  .zstat-val{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--accent)}
+  .zstat-lbl{font-size:8px;color:var(--muted);margin-top:1px}
+
+  /* Speaker rows */
+  .spk-row{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+    padding:9px 11px;margin-bottom:5px}
+  .spk-row.active{border-color:var(--accent)}
+  .spk-row-header{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  .spk-row-name{font-size:11px;font-weight:500;flex:1}
+  .spk-del2{cursor:pointer;color:var(--muted);font-size:15px}
+  .spk-del2:hover{color:var(--danger)}
+  .ctrl-row{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .ctrl-label{font-size:9px;color:var(--muted);font-family:var(--mono);min-width:52px}
+  .ctrl-row input[type=range]{flex:1;accent-color:var(--accent)}
+  .ctrl-val{font-size:9px;font-family:var(--mono);color:var(--accent);min-width:32px;text-align:right}
+  .spk-zone-sel{font-size:9px;font-family:var(--mono);background:var(--surface);
+    border:1px solid var(--border);color:var(--text);border-radius:2px;padding:2px 5px}
+
+  /* Rec boxes */
+  .rec-box{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px}
+  .rec-badge{display:inline-block;font-size:8px;font-family:var(--mono);padding:2px 6px;
+    border-radius:2px;background:rgba(200,169,110,.15);color:var(--accent);margin-bottom:4px}
+  .rec-name{font-size:12px;font-weight:500;margin-bottom:3px}
+  .rec-reason{font-size:10px;color:var(--muted);line-height:1.5}
+  .rec-meta{font-size:9px;font-family:var(--mono);color:var(--muted);margin-top:5px}
+
+  /* Legend */
+  .legend{display:flex;flex-direction:column;gap:4px}
+  .leg-row{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted)}
+  .leg-sw{width:22px;height:8px;border-radius:2px;flex-shrink:0}
+
+  .add-zone-btn{width:100%;padding:7px;background:transparent;border:1px dashed var(--border);
+    border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:10px;
+    cursor:pointer;transition:all .12s}
+  .add-zone-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+  .empty-msg{font-size:10px;color:var(--muted);font-family:var(--mono)}
+
+  .zone-assign{display:flex;align-items:center;gap:6px;margin-top:4px}
+  .zone-assign label{font-size:9px;color:var(--muted);font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bose Coverage Simulator</h1>
+  <span class="hdr-sep">|</span>
+  <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">Multi-sone · dB-visualisering</span>
+  <div class="hdr-actions">
+    <button class="btn" onclick="document.getElementById('pdfInput').click()">Last opp PDF / bilde</button>
+    <input type="file" id="pdfInput" accept="image/*,.pdf,application/pdf" style="display:none" onchange="loadFloor(event)"><span id="floorStatus" style="font-size:9px;color:var(--muted);font-family:var(--mono)"></span>
+    <button class="btn" id="calibBtn" onclick="startCalib()">📐 Kalibrer</button>
+    <button class="btn" onclick="exportReport()">Eksporter</button>
+    <button class="btn danger" onclick="clearAll()">Nullstill</button>
+  </div>
+</header>
+
+<!-- LEFT: Room + Speakers -->
+<div class="left-panel">
+  <div>
+    <div class="sec-label">Romstørrelse</div>
+    <div class="row">
+      <div class="field"><label>BREDDE m</label><input type="number" id="rW" value="20" min="2" max="300" step="0.5" onchange="redraw()"></div>
+      <div class="field"><label>DYBDE m</label><input type="number" id="rL" value="15" min="2" max="300" step="0.5" onchange="redraw()"></div>
+      <div class="field"><label>TAKHØYDE m</label><input type="number" id="rH" value="2.7" min="1.5" max="20" step="0.1" onchange="redraw()"></div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <div class="field" style="flex:1">
+        <label>SYSTEM</label>
+        <select id="sysVolt" onchange="updateRecs()">
+          <option value="100">100V (standard)</option>
+          <option value="70">70V</option>
+          <option value="8ohm">8 ohm direkte</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1">
+        <label>BRUKSOMRÅDE</label>
+        <select id="spaceType" onchange="updateRecs()">
+          <option value="office">Kontor / åpent landskap</option>
+          <option value="meeting">Møterom</option>
+          <option value="reception">Resepsjon / lobby</option>
+          <option value="utility">Servicerom / korridor</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="calibSection">
+    <div class="sec-label">Kalibrering</div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:10px;font-size:10px;font-family:var(--mono)">
+      <div id="calibStatus" style="color:var(--muted);margin-bottom:8px">Ingen kalibrering utført</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" onclick="startCalib()">📐 Kalibrer</button>
+        <button class="btn danger" onclick="resetCalib()">Nullstill</button>
+      </div>
+      <div style="margin-top:8px;color:var(--muted);line-height:1.5;font-size:10px">
+        1. Last opp plantegning (PNG/JPG/PDF)<br>
+        2. Trykk «Kalibrer» — klikk på et kjent punkt A<br>
+        3. Klikk på punkt B — oppgi avstand i meter<br>
+        4. Gul linje bekrefter kalibreringen<br><br>
+        <span style="color:var(--warn)">💡 Tips: Hvis PDF ikke laster, ta screenshot og last opp som PNG.</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="sec-label">Høyttaler — klikk for å plassere</div>
+
+    <div class="cat-title">Ceiling — DesignMax</div>
+    <button class="spk-btn" onclick="sel('DM2C')" id="b-DM2C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM2C-LP</div><div class="spk-spec">100° · 8W · Lavprofil</div></div></button>
+    <button class="spk-btn" onclick="sel('DM3C')" id="b-DM3C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM3C</div><div class="spk-spec">100° · 30W</div></div></button>
+    <button class="spk-btn" onclick="sel('DM5C')" id="b-DM5C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM5C</div><div class="spk-spec">130° · 60W · 87dB</div></div></button>
+    <button class="spk-btn" onclick="sel('DM6C')" id="b-DM6C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM8C</div><div class="spk-spec">90° · 120W · High output</div></div></button>
+    <button class="spk-btn" onclick="sel('DM8C')" id="b-DM8C"><div class="spk-dot" style="background:#7eb8c8"></div><div><div class="spk-name">DM8C</div><div class="spk-spec">90° · 120W · High output</div></div></button>
+    <div class="cat">Subwoofer — DesignMax</div>
+    <button class="spkbtn" onclick="sel('DM8CSUB')" id="b-DM8CSUB"><div class="dot" style="background:#888888"></div><div><div class="sn">DM8C-SUB</div><div class="ss">Takinnfelt · 180W · under 200Hz</div></div></button>
+    <button class="spkbtn" onclick="sel('DM10PSUB')" id="b-DM10PSUB"><div class="dot" style="background:#888888"></div><div><div class="sn">DM10P-SUB</div><div class="ss">Pendel · 300W · under 200Hz</div></div></button>
+
+    <div class="cat-title">Ceiling — EdgeMax</div>
+    <button class="spk-btn" onclick="sel('EM90')" id="b-EM90"><div class="spk-dot" style="background:#c87e7e"></div><div><div class="spk-name">EdgeMax EM90</div><div class="spk-spec">90° · 60W · Takhjørne</div></div></button>
+    <button class="spk-btn" onclick="sel('EM180')" id="b-EM180"><div class="spk-dot" style="background:#c87e7e"></div><div><div class="spk-name">EdgeMax EM180</div><div class="spk-spec">180° · 60W · Takhjørne</div></div></button>
+
+    <div class="cat-title">Ceiling — FreeSpace</div>
+    <button class="spk-btn" onclick="sel('FS3')" id="b-FS3"><div class="spk-dot" style="background:#7ec896"></div><div><div class="spk-name">FreeSpace 3</div><div class="spk-spec">130° · 40W</div></div></button>
+    <button class="spk-btn" onclick="sel('FS3F')" id="b-FS3F"><div class="spk-dot" style="background:#7ec896"></div><div><div class="spk-name">FreeSpace 3F</div><div class="spk-spec">130° · 40W · Flush</div></div></button>
+
+    <div class="cat-title">Surface — DesignMax</div>
+    <button class="spk-btn" onclick="sel('DM5SE')" id="b-DM5SE"><div class="spk-dot" style="background:#b87ec8"></div><div><div class="spk-name">DM5SE</div><div class="spk-spec">100°×60° · 60W · Vegg</div></div></button>
+    <button class="spkbtn" onclick="sel('DM6SE')" id="b-DM6SE"><div class="dot" style="background:#b87ec8"></div><div><div class="sn">DM6SE</div><div class="ss">125° · 125W · 90dB · IP55</div></div></button>
+    <button class="spk-btn" onclick="sel('DM8S')" id="b-DM8S"><div class="spk-dot" style="background:#b87ec8"></div><div><div class="spk-name">DM8S</div><div class="spk-spec">90°×50° · 120W · Vegg</div></div></button>
+
+    <div class="cat-title">Surface — FreeSpace DS</div>
+    <button class="spk-btn" onclick="sel('DS16F')" id="b-DS16F"><div class="spk-dot" style="background:#c8a96e"></div><div><div class="spk-name">DS16F</div><div class="spk-spec">90° · 16W</div></div></button>
+    <button class="spk-btn" onclick="sel('DS40F')" id="b-DS40F"><div class="spk-dot" style="background:#c8a96e"></div><div><div class="spk-name">DS40F</div><div class="spk-spec">100° · 40W</div></div></button>
+    <button class="spk-btn" onclick="sel('DS100F')" id="b-DS100F"><div class="spk-dot" style="background:#c8a96e"></div><div><div class="spk-name">DS100F</div><div class="spk-spec">90° · 100W</div></div></button>
+
+    <div class="cat-title">Pendant — DesignMax</div>
+    <button class="spk-btn" onclick="sel('DM3P')" id="b-DM3P"><div class="spk-dot" style="background:#e8b060"></div><div><div class="spk-name">DM3P</div><div class="spk-spec">100° · 30W · Pendel</div></div></button>
+    <button class="spk-btn" onclick="sel('DM5P')" id="b-DM5P"><div class="spk-dot" style="background:#e8b060"></div><div><div class="spk-name">DM5P</div><div class="spk-spec">90° · 60W · Pendel</div></div></button>
+    <button class="spkbtn" onclick="sel('DM6PE')" id="b-DM6PE"><div class="dot" style="background:#e8b060"></div><div><div class="sn">DM6PE</div><div class="ss">120° · 125W · 88dB · Pendel utendørs</div></div></button>
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div class="canvas-area" id="ca">
+  <canvas id="c"></canvas>
+  <div class="mode-bar">
+    <button class="mode-btn active" id="mPlace"  onclick="setMode('place')">PLASSER</button>
+    <button class="mode-btn"        id="mZone"   onclick="setMode('zone')">TEGN SONE</button>
+    <button class="mode-btn"        id="mSelect" onclick="setMode('select')">FLYTT</button>
+    <button class="mode-btn"        id="mPan"    onclick="setMode('pan')">PAN</button>
+    <button class="mode-btn"        id="mCalibrate" onclick="setMode('calibrate')">KALIBRER</button>
+  </div>
+  <div class="canvas-hint" id="hint">Velg høyttaler til venstre, klikk for å plassere</div>
+</div>
+
+<!-- RIGHT: Zones + Speakers + Recs -->
+<div class="right-panel">
+
+  <div>
+    <div class="sec-label">Soner</div>
+    <div id="zoneList"><span class="empty-msg">Ingen soner — bruk «TEGN SONE»</span></div>
+    <button class="add-zone-btn" onclick="addZoneManual()">+ Legg til sone manuelt</button>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="sec-label">Plasserte høyttalere</div>
+    <div id="spkList"><span class="empty-msg">Ingen plassert ennå</span></div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="sec-label">Fargeforklaring</div>
+    <div class="legend">
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(200,90,90,.75)"></div>Overlapp / +3 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(120,200,100,.7)"></div>God dekning 0 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(100,160,220,.55)"></div>Kant −3 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(90,90,130,.4)"></div>Svak −6 dB</div>
+      <div class="leg-row"><div class="leg-sw" style="background:rgba(200,60,60,.15)"></div>Dødpunkt</div>
+      <div class="leg-row"><div class="leg-sw" style="border:1px dashed rgba(255,255,255,.3)"></div>Sonegrense</div>
+    </div>
+  </div>
+
+  <hr>
+
+  <div>
+    <div class="sec-label">Forsterker · Prosessor · Soner</div>
+    <div id="recList"><span class="empty-msg">Plasser høyttalere for anbefaling</span></div>
+  </div>
+</div>
+
+<script>
+// ── VERIFIED BOSE PROFESSIONAL DATA (boseprofessional.com TDS 2020-2025) ────
+
+const SPK={
+  // CEILING — DesignMax
+  DM2C:{name:'DM2C-LP',ang:150,pwr:20,sens:84,color:'#7eb8c8',range:3.0,mount:'ceiling',
+    taps70:[1.5,3,6],taps100:[2.3,4.5,9],note:'150° · 20W · 84dB · TDS 09/2020'},
+  DM3C:{name:'DM3C',ang:135,pwr:30,sens:83,color:'#7eb8c8',range:4.0,mount:'ceiling',
+    taps70:[3,6,12,25],taps100:[6,12,25],note:'135° · 30W · 83dB · TDS 09/2020'},
+  DM5C:{name:'DM5C',ang:130,pwr:60,sens:87,color:'#7eb8c8',range:5.5,mount:'ceiling',
+    taps70:[3,6,12,25,50],taps100:[6,12,25,50],note:'130° · 60W · 87dB · TDS 12/2025'},
+  DM6C:{name:'DM6C',ang:120,pwr:125,sens:88,color:'#7eb8c8',range:6.5,mount:'ceiling',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'120° · 125W · 88dB · TDS 04/2023'},
+  DM8C:{name:'DM8C',ang:135,pwr:150,sens:91,color:'#7eb8c8',range:8.0,mount:'ceiling',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'135° · 150W · 91dB · TDS 04/2023'},
+  // CEILING — EdgeMax
+  EM90:{name:'EdgeMax EM90',ang:90,pwr:60,sens:89,color:'#c87e7e',range:6.0,mount:'edge',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'90° PhaseGuide · 60W · 89dB'},
+  EM180:{name:'EdgeMax EM180',ang:180,pwr:60,sens:89,color:'#c87e7e',range:6.0,mount:'edge',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'180° PhaseGuide · 60W · 89dB'},
+  // CEILING — FreeSpace DS
+  FS3:{name:'DS16F (tak)',ang:140,pwr:16,sens:84,color:'#7ec896',range:3.5,mount:'ceiling',
+    taps70:[1,2,4,8,16],taps100:[2,4,8,16],note:'140° · 16W · 84dB · Innfelt tak'},
+  FS3F:{name:'DS40F (tak)',ang:125,pwr:40,sens:87,color:'#7ec896',range:5.0,mount:'ceiling',
+    taps70:[2.5,5,10,20,40],taps100:[2.5,5,10,20,40],note:'125° · 40W · 87dB · Innfelt tak'},
+  // SUBWOOFER — DesignMax (ingen 2D dekning)
+  DM8CSUB:{name:'DM8C-SUB',ang:360,pwr:180,sens:89,color:'#888888',range:0,mount:'sub',
+    taps70:[20,40,80,150],taps100:[20,40,80,150],note:'Takinnfelt subwoofer · 180W · under 200Hz'},
+  DM10PSUB:{name:'DM10P-SUB',ang:360,pwr:300,sens:89,color:'#888888',range:0,mount:'sub',
+    taps70:[40,80,150,300],taps100:[40,80,150,300],note:'Pendel subwoofer · 300W · under 200Hz'},
+  // SURFACE — DesignMax
+  DM5SE:{name:'DM5SE',ang:130,pwr:60,sens:90,color:'#b87ec8',range:6.0,mount:'wall',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'130° · 60W · 90dB · Innendørs'},
+  DM6SE:{name:'DM6SE',ang:125,pwr:125,sens:90,color:'#b87ec8',range:7.0,mount:'wall',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'125° · 125W · 90dB · IP55 utendørs'},
+  DM8S:{name:'DM8S',ang:130,pwr:150,sens:93,color:'#b87ec8',range:9.0,mount:'wall',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'130° · 150W · 93dB'},
+  // SURFACE — FreeSpace DS
+  DS16F:{name:'DS16F',ang:140,pwr:16,sens:84,color:'#c8a96e',range:4.0,mount:'wall',
+    taps70:[1,2,4,8,16],taps100:[2,4,8,16],note:'140° · 16W · 84dB · Vegg'},
+  DS40F:{name:'DS40F',ang:125,pwr:40,sens:87,color:'#c8a96e',range:6.0,mount:'wall',
+    taps70:[2.5,5,10,20,40],taps100:[2.5,5,10,20,40],note:'125° · 40W · 87dB · Vegg'},
+  DS100F:{name:'DS100F',ang:90,pwr:100,sens:90,color:'#c8a96e',range:8.0,mount:'wall',
+    taps70:[5,10,20,40,80,100],taps100:[5,10,20,40,80,100],note:'90° · 100W · 90dB · Vegg'},
+  // PENDANT — DesignMax
+  DM3P:{name:'DM3P',ang:135,pwr:30,sens:83,color:'#e8b060',range:4.0,mount:'pendant',
+    taps70:[3,6,12,25],taps100:[6,12,25],note:'135° · 30W · 83dB · Pendel'},
+  DM5P:{name:'DM5P',ang:130,pwr:60,sens:87,color:'#e8b060',range:5.5,mount:'pendant',
+    taps70:[3,6,12,25,50],taps100:[6,12,25,50],note:'130° · 60W · 87dB · Pendel'},
+  DM6PE:{name:'DM6PE',ang:120,pwr:125,sens:88,color:'#e8b060',range:6.5,mount:'pendant',
+    taps70:[2.5,5,10,20,40,80],taps100:[5,10,20,40,80],note:'120° · 125W · 88dB · Pendel utendørs'},
+};
+
+const ZONE_COLORS=['#4a9eff','#ff6b6b','#51cf66','#ffd43b','#cc5de8','#ff922b','#20c997','#f06595'];
+
+const AMPS=[
+  {name:'IZA 190-HZ',       totalW:90,   zones:1,ch:1,desc:'1×90W. 70/100V. Enkel sone, liten installasjon.'},
+  {name:'IZA 2120-HZ',      totalW:240,  zones:2,ch:2,desc:'2×120W. 70/100V. Opptil 2 soner. Enkel oppsett.'},
+  {name:'IZA 4120-HZ',      totalW:480,  zones:4,ch:4,desc:'4×120W. 70/100V. Opptil 4 soner.'},
+  {name:'PowerSpace P2600A',totalW:1200, zones:2,ch:2,desc:'2×600W. AmpLink. Anbefalt for mellomstore kommersielle anlegg.'},
+  {name:'PowerSpace P4300A',totalW:1200, zones:4,ch:4,desc:'4×300W. AmpLink. 4 soner, 1200W total.'},
+  {name:'PowerSpace+ P4300',totalW:1200, zones:4,ch:4,desc:'4×300W. DSP innebygd. Rask oppsett via nettleser.'},
+  {name:'PowerShare PS404D',totalW:400,  zones:4,ch:4,desc:'400W delt over 4 utganger. Dante. PowerShare-teknologi.'},
+  {name:'PowerShare PS604D',totalW:600,  zones:4,ch:4,desc:'600W delt over 4 utganger. Dante. Full fleksibel fordeling.'},
+  {name:'PowerShare PS802D',totalW:800,  zones:8,ch:8,desc:'800W delt over 8 utganger. Dante. Store flersone-anlegg.'},
+];
+
+const PROCS=[
+  {name:'CSP-428',  ins:4, outs:4, conf:false,desc:'Fixed DSP. 4 inn/4 ut. Bakgrunnsmusikk og enkel paging.'},
+  {name:'CSP-1248', ins:12,outs:8, conf:false,desc:'Fixed DSP. 12 inn/8 ut. Multi-sone musikk og paging.'},
+  {name:'ESP-880A', ins:8, outs:8, conf:false,desc:'ControlSpace ESP-880A. 8 inn/8 ut. Anbefalt for kommersielle musikanlegg. AmpLink.'},
+  {name:'EX-1280',  ins:12,outs:8, conf:false,desc:'ControlSpace EX-1280. Open architecture DSP. Dante. Full fleksibilitet.'},
+  {name:'EX-440C',  ins:4, outs:4, conf:true, desc:'ControlSpace EX-440C. Konferanseprosessor med AEC. 4 inn/4 ut. Møterom.'},
+  {name:'EX-12AEC', ins:12,outs:4, conf:true, desc:'ControlSpace EX-12AEC. Konferanse-signalprosessor med AEC. 12 inn/4 ut.'},
+  {name:'EX-1280C', ins:12,outs:8, conf:true, desc:'ControlSpace EX-1280C. Konferanse + Dante. 12 inn/8 ut. Store hybridrom.'},
+];
+
+
+let speakers=[], zones=[], selModel=null, mode='place';
+let selSpk=null, dragSpk=null, dragOff={x:0,y:0};
+let panX=0,panY=0,panStart=null;
+let zoneDrawing=false, zonePt1=null, zonePreview=null;
+let floorImg=null;
+let zoneCounter=0, spkCounter=0;
+let calibPts=[], calibLine=null, floorPixelScale=null;
+
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const area=document.getElementById('ca');
+
+function resize(){ canvas.width=area.clientWidth; canvas.height=area.clientHeight; redraw(); }
+window.addEventListener('resize',resize); resize();
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getRW(){ return +document.getElementById('rW').value; }
+function getSysVolt(){ const el=document.getElementById('sysVolt'); return el?el.value:'100'; }
+function getSpaceType(){ const el=document.getElementById('spaceType'); return el?el.value:'office'; }
+function getRL(){ return +document.getElementById('rL').value; }
+function getRH(){ return +document.getElementById('rH').value; }
+
+function getScale(){
+  const pad=44;
+  return Math.min((canvas.width-pad*2)/getRW(),(canvas.height-pad*2)/getRL());
+}
+function getOff(){
+  const sc=getScale(),rw=getRW(),rl=getRL();
+  return {x:(canvas.width-rw*sc)/2+panX, y:(canvas.height-rl*sc)/2+panY};
+}
+function r2c(rx,ry){ const o=getOff(),sc=getScale(); return {x:o.x+rx*sc,y:o.y+ry*sc}; }
+function c2r(cx,cy){ const o=getOff(),sc=getScale(); return {x:(cx-o.x)/sc,y:(cy-o.y)/sc}; }
+function clamp(v,mn,mx){ return Math.max(mn,Math.min(mx,v)); }
+
+function inZone(rx,ry,z){
+  return rx>=z.x && rx<=z.x+z.w && ry>=z.y && ry<=z.y+z.h;
+}
+
+// ── MODEL SELECTION ───────────────────────────────────────────────────────────
+function sel(id){
+  selModel=id;
+  document.querySelectorAll('.spk-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('b-'+id).classList.add('selected');
+  setMode('place');
+  hint(`${SPK[id].name} valgt — klikk i rommet for å plassere`);
+}
+
+function setMode(m){
+  mode=m;
+  ['Place','Zone','Select','Pan','Calibrate'].forEach(n=>{
+    const el=document.getElementById('m'+n);
+    if(el) el.classList.toggle('active', m===n.toLowerCase());
+  });
+  if(m==='calibrate') hint('Klikk to punkter på plantegningen med kjent avstand, oppgi meter');
+  else if(m==='zone') hint('Klikk og dra for å tegne en sone');
+  else if(m==='select') hint('Klikk og dra høyttalere for å flytte dem. Høyreklikk for å endre retning.');
+  else if(m==='pan') hint('Klikk og dra for å panorere');
+  else hint(selModel ? `${SPK[selModel].name} — klikk for å plassere` : 'Velg høyttaler til venstre');
+}
+
+function hint(t){ document.getElementById('hint').textContent=t; }
+
+// ── ZONES ─────────────────────────────────────────────────────────────────────
+function addZoneManual(){
+  const rw=getRW(), rl=getRL();
+  const z={id:zoneCounter++, name:'Sone '+(zones.length+1),
+    x:rw*0.1, y:rl*0.1, w:rw*0.35, h:rl*0.35,
+    color:ZONE_COLORS[zones.length%ZONE_COLORS.length]};
+  zones.push(z);
+  updateZoneList(); redraw();
+}
+
+function deleteZone(id){
+  zones=zones.filter(z=>z.id!==id);
+  speakers.forEach(s=>{ if(s.zone===id) s.zone=null; });
+  updateZoneList(); updateSpkList(); redraw();
+}
+
+function updateZoneList(){
+  const el=document.getElementById('zoneList');
+  if(!zones.length){ el.innerHTML='<span class="empty-msg">Ingen soner — bruk «TEGN SONE»</span>'; updateRecs(); return; }
+  el.innerHTML=zones.map(z=>{
+    const spksInZone=speakers.filter(s=>s.zone===z.id);
+    const st=calcZoneStats(z);
+    return `<div class="zone-item" id="zi-${z.id}">
+      <div class="zone-header">
+        <div class="zone-color" style="background:${z.color}"></div>
+        <input class="zone-name-input" value="${z.name}" onchange="zones.find(zz=>zz.id===${z.id}).name=this.value;updateRecs()">
+        <span class="zone-del" onclick="deleteZone(${z.id})">×</span>
+      </div>
+      <div class="zone-stats">
+        <div class="zstat"><div class="zstat-val" style="color:${covColor(st.cov)}">${st.cov}%</div><div class="zstat-lbl">Dekning</div></div>
+        <div class="zstat"><div class="zstat-val" style="color:var(--danger)">${st.dead}%</div><div class="zstat-lbl">Dødpunkt</div></div>
+        <div class="zstat"><div class="zstat-val">${spksInZone.length}</div><div class="zstat-lbl">Høyttalere</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  updateRecs();
+}
+
+function covColor(p){ return p>85?'var(--success)':p>65?'var(--accent)':'var(--danger)'; }
+
+function calcZoneStats(z){
+  if(!speakers.length) return {cov:0,dead:100,overlap:0};
+  const res=0.3; // meters per sample
+  let cov=0,dead=0,total=0;
+  for(let rx=z.x;rx<z.x+z.w;rx+=res){
+    for(let ry=z.y;ry<z.y+z.h;ry+=res){
+      total++;
+      const rh=getRH();
+      let covered=false;
+      speakers.forEach(s=>{
+        if(s.zone==null||s.zone!=z.id) return;
+        const sp=SPK[s.model];
+        const dx=rx-s.x,dy=ry-s.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<0.05){covered=true;return;}
+        const halfAngRad=sp.ang/2*Math.PI/180;
+        const coverageR=Math.max(rh-1.5,0.5)*Math.tan(halfAngRad);
+        if(!sp.mount||sp.mount==='ceiling'||sp.mount==='pendant'){
+          if(dist<=coverageR) covered=true;
+        } else if(sp.mount==='edge'){
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=halfAngRad&&dist<=coverageR*1.5) covered=true;
+        } else {
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=halfAngRad&&dist<=sp.range) covered=true;
+        }
+      });
+      if(covered) cov++; else dead++;
+    }
+  }
+  if(!total) return {cov:0,dead:100};
+  return {cov:Math.round(cov/total*100), dead:Math.round(dead/total*100)};
+}
+
+// ── SPEAKERS ──────────────────────────────────────────────────────────────────
+function assignZone(sel){
+  const i = +sel.getAttribute('data-spk-idx');
+  if(i >= 0 && i < speakers.length){
+    speakers[i].zone = sel.value === '' ? null : +sel.value;
+    updateZoneList();
+    redraw();
+  }
+}
+
+function updateSpkList(){
+  updateRecs();
+  const el=document.getElementById('spkList');
+  if(!speakers.length){ el.innerHTML='<span class="empty-msg">Ingen plassert ennå</span>'; return; }
+  el.innerHTML=speakers.map((s,i)=>{
+    const sp=SPK[s.model];
+    const zOpts=zones.map(z=>`<option value="${z.id}" ${s.zone!=null&&s.zone==z.id?'selected':''}>${z.name}</option>`).join('');
+    return `<div class="spk-row ${selSpk===i?'active':''}" onclick="selSpeaker(${i})">
+      <div class="spk-row-header">
+        <div class="spk-dot" style="background:${sp.color};width:7px;height:7px;border-radius:50%;flex-shrink:0"></div>
+        <div class="spk-row-name">${i+1}. ${sp.name}</div>
+        <span class="spk-del2" onclick="event.stopPropagation();delSpk(${i})">×</span>
+      </div>
+      ${(['wall','edge'].includes(SPK[s.model].mount))?`
+      <div class="ctrl-row">
+        <span class="ctrl-label">RETNING</span>
+        <input type="range" min="0" max="359" value="${Math.round(s.dir)}"
+          oninput="speakers[${i}].dir=+this.value;this.nextElementSibling.textContent=this.value+'°';redraw();updateZoneList()">
+        <span class="ctrl-val">${Math.round(s.dir)}°</span>
+      </div>`:'<div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-bottom:3px">Takinnfelt — omnidireksjonell ↓</div>'}
+      <div class="zone-assign">
+        <label>SONE:</label>
+        <select class="spk-zone-sel" data-spk-idx="${i}" onchange="assignZone(this)">
+          <option value="">— ingen —</option>${zOpts}
+        </select>
+      </div>
+      <div style="font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:3px">
+        (${s.x.toFixed(1)}, ${s.y.toFixed(1)}) m · ${sp.ang}° · ${sp.pwr}W
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selSpeaker(i){ selSpk=selSpk===i?null:i; updateSpkList(); redraw(); }
+function delSpk(i){ speakers.splice(i,1); if(selSpk>=speakers.length)selSpk=null; updateSpkList();updateZoneList();redraw(); }
+function startCalib(){
+  calibPts=[];calibLine=null;
+  setMode('calibrate');
+  hint('Klikk punkt A på plantegningen (f.eks. start av en kjent vegg)');
+}
+
+function resetCalib(){
+  calibPts=[];calibLine=null;floorPixelScale=null;
+  document.getElementById('calibStatus').textContent='Ingen kalibrering utført';
+  document.getElementById('calibStatus').style.color='var(--muted)';
+  redraw();
+}
+
+function clearAll(){ speakers=[];zones=[];selSpk=null;zoneCounter=0;calibPts=[];calibLine=null;floorPixelScale=null; updateSpkList();updateZoneList();redraw(); }
+
+// ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
+function buildZoneHtml(){
+  return zones.map(function(z){
+    var sp2=speakers.filter(function(s){return s.zone==z.id;});
+    if(!sp2.length) return '<div style="margin-top:6px;padding:7px;background:rgba(0,0,0,.3);border-left:2px solid '+z.color+';border-radius:0 3px 3px 0"><div style="font-size:10px;color:'+z.color+'">'+z.name+'</div><div style="font-size:9px;color:var(--muted);font-family:var(--mono)">Ingen høyttalere</div></div>';
+    var pw2=sp2.reduce(function(s,x){return s+SPK[x.model].pwr;},0);
+    var st=calcZoneStats(z);
+    return '<div style="margin-top:6px;padding:7px;background:rgba(0,0,0,.3);border-left:2px solid '+z.color+';border-radius:0 3px 3px 0">'
+      +'<div style="font-size:10px;font-weight:600;color:'+z.color+';margin-bottom:2px">'+z.name+'</div>'
+      +'<div style="font-size:9px;color:var(--muted);font-family:var(--mono)">'+sp2.length+' høyttalere · '+pw2+'W · Dekning: <span style="color:'+covColor(st.cov)+'">'+st.cov+'%</span> · Dødpunkt: '+st.dead+'%</div>'
+      +'</div>';
+  }).join('');
+}
+
+function calcRecommendedSpacing(model){
+  const sp=SPK[model]; if(!sp) return null;
+  const effectiveH=Math.max(getRH()-1.5,0.5);
+  const halfAngRad=sp.ang/2*Math.PI/180;
+  const coverageR=effectiveH*Math.tan(halfAngRad);
+  const diameter=coverageR*2;
+  const spaceType=getSpaceType();
+  const overlap=spaceType==='utility'?1.0:0.85;
+  return (diameter*overlap).toFixed(1);
+}
+
+function calcTapRecommendation(model){
+  const sp=SPK[model]; if(!sp||!sp.pwr) return null;
+  const volt=getSysVolt();
+  const spaceType=getSpaceType();
+  const targetSPL=spaceType==='utility'?70:spaceType==='meeting'?72:75;
+  const effectiveH=Math.max(getRH()-1.5,0.5);
+  const avgDist=effectiveH;
+  const splAt1m=sp.sens;
+  const requiredPwr=Math.pow(10,(targetSPL-splAt1m+20*Math.log10(Math.max(avgDist,1)))/10);
+  const taps70=sp.taps70||[1.5,3,6,12,25,50];
+  const taps100=sp.taps100||[2.5,5,10,20,40,80];
+  const taps8=[sp.pwr];
+  let tapList=volt==='70'?taps70:volt==='8ohm'?taps8:taps100;
+  tapList=tapList.filter(t=>t<=sp.pwr);
+  let recTap=tapList[tapList.length-1];
+  for(const t of tapList){
+    const splAtTap=splAt1m+10*Math.log10(t)-20*Math.log10(Math.max(avgDist,1));
+    if(splAtTap>=targetSPL){recTap=t;break;}
+  }
+  const splAtRecTap=(splAt1m+10*Math.log10(recTap)-20*Math.log10(Math.max(avgDist,1))).toFixed(0);
+  return {tap:recTap,spl:splAtRecTap,volt,requiredPwr:requiredPwr.toFixed(1)};
+}
+
+function updateRecs(){
+  const el=document.getElementById('recList');
+  if(!speakers.length){el.innerHTML='<span class="empty-msg">Plasser høyttalere for anbefaling</span>';return;}
+
+  const totalZones=Math.max(1,zones.length);
+  const totalPwr=speakers.reduce((s,sp)=>s+SPK[sp.model].pwr,0);
+  const totalSpk=speakers.length;
+  const volt=getSysVolt();
+  const spaceType=getSpaceType();
+  const hasConf=spaceType==='meeting';  // Only meeting rooms get conference processor
+  const rw=getRW(),rl=getRL();
+  const roomArea=(rw*rl).toFixed(0);
+
+  // Find dominant speaker model
+  const mc={};
+  speakers.forEach(s=>{mc[s.model]=(mc[s.model]||0)+1;});
+  const dom=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  const recSpacing=dom?calcRecommendedSpacing(dom):null;
+  const tapRec=dom?calcTapRecommendation(dom):null;
+
+  // Estimate recommended count for room
+  let recCount='—';
+  if(dom&&recSpacing){
+    const sM=parseFloat(recSpacing);
+    const nx=Math.max(1,Math.ceil(rw/sM)), ny=Math.max(1,Math.ceil(rl/sM));
+    recCount=nx+'×'+ny+' = '+(nx*ny)+' stk';
+  }
+
+  // For 70/100V: select by total system power capacity, not channel count
+  // Speaker tap watts are typically 2.5-40W each, not rated power
+  // Estimate tap power: assume average 10W tap per speaker (conservative)
+  const estimatedTapPwr = totalSpk * 10; // ~10W tap per speaker avg
+  const amp=AMPS.find(a=>a.totalW>=estimatedTapPwr*1.25&&a.zones>=totalZones)||AMPS[AMPS.length-1];
+  const proc=hasConf
+    ? (PROCS.find(p=>p.conf&&p.outs>=totalZones)||PROCS[5])
+    : (PROCS.find(p=>!p.conf&&p.outs>=totalZones)||PROCS[4]);
+
+  const spL={office:'Kontor/landskap',meeting:'Møterom',reception:'Resepsjon',utility:'Servicerom'};
+  const effH=Math.max(getRH()-1.5,0.5).toFixed(1);
+  const targetSPL=spaceType==='utility'?70:spaceType==='meeting'?72:75;
+
+  el.innerHTML=`
+    <div style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:8px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:7px;letter-spacing:.1em">PLASSERING</div>
+      ${recSpacing?`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:7px">
+        <div style="background:rgba(200,169,110,.1);border:1px solid rgba(200,169,110,.25);border-radius:3px;padding:8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:18px;font-weight:500;color:var(--accent)">${recSpacing} m</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Maks avstand</div>
+        </div>
+        <div style="background:rgba(126,184,200,.1);border:1px solid rgba(126,184,200,.25);border-radius:3px;padding:8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:14px;font-weight:500;color:var(--accent2)">${recCount}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Anbefalt antall</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);font-family:var(--mono);line-height:1.6">
+        Lyttehøyde 1.5m · Takavstand: ${effH}m · ${spL[spaceType]||spaceType}
+      </div>`:''}
+    </div>
+    ${tapRec?`
+    <div style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:4px;padding:10px;margin-bottom:8px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--muted);margin-bottom:7px;letter-spacing:.1em">TRANSFORMER-TAP — ${volt}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px">
+        <div style="background:rgba(126,196,150,.1);border:1px solid rgba(126,196,150,.25);border-radius:3px;padding:7px;text-align:center">
+          <div style="font-family:var(--mono);font-size:17px;font-weight:500;color:var(--success)">${tapRec.tap}W</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Anbefalt tap</div>
+        </div>
+        <div style="background:rgba(200,169,110,.08);border:1px solid rgba(200,169,110,.2);border-radius:3px;padding:7px;text-align:center">
+          <div style="font-family:var(--mono);font-size:17px;font-weight:500;color:var(--accent)">${tapRec.spl} dB</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">SPL @ 1.5m</div>
+        </div>
+        <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:3px;padding:7px;text-align:center">
+          <div style="font-family:var(--mono);font-size:17px;font-weight:500;color:var(--text)">${tapRec.requiredPwr}W</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:2px">Krav per stk</div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);font-family:var(--mono);line-height:1.5">
+        Mål: ${targetSPL} dB(A) · ${volt} system<br>
+        <span style="color:rgba(200,169,110,.5)">Verifiser mot tap-chart i datablad</span>
+      </div>
+    </div>`:''}
+    <div class="rec-box" style="margin-bottom:8px">
+      <div class="rec-badge">FORSTERKER</div>
+      <div class="rec-name">${amp.name}</div>
+      <div class="rec-reason">${amp.desc}</div>
+      <div class="rec-meta">${totalSpk} høyttalere · ${totalPwr}W · ${totalZones} sone${totalZones>1?'r':''}</div>
+    </div>
+    <div class="rec-box" style="margin-bottom:8px">
+      <div class="rec-badge">PROSESSOR</div>
+      <div class="rec-name">${proc.name}</div>
+      <div class="rec-reason">${proc.desc}</div>
+      <div class="rec-meta">${proc.ins} inn / ${proc.outs} ut${proc.conf?' · AEC':''}</div>
+    </div>
+    ${zones.length ? buildZoneHtml() : ''}
+    <div style="margin-top:8px;padding:8px;background:rgba(0,0,0,.2);border-radius:4px;font-size:9px;font-family:var(--mono);color:var(--muted);line-height:1.8">
+      <span style="color:var(--text);font-size:10px;display:block;margin-bottom:2px">Systemsammendrag</span>
+      ${rw}×${rl}m · ${roomArea}m² · Tak ${getRH()}m<br>
+      ${totalSpk} høyttalere · ${totalPwr}W · ${Math.max(1,zones.length)} sone${zones.length>1?'r':''}
+    </div>`;
+}
+
+// ── DRAW ──────────────────────────────────────────────────────────────────────
+function redraw(){
+  const rw=getRW(),rl=getRL(),sc=getScale();
+  const o=getOff();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Floor
+  ctx.fillStyle='#0d0d0d';
+  ctx.fillRect(o.x,o.y,rw*sc,rl*sc);
+
+  if(floorImg){
+    ctx.globalAlpha=.3;
+    ctx.drawImage(floorImg,o.x,o.y,rw*sc,rl*sc);
+    ctx.globalAlpha=1;
+  }
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=.5;
+  for(let x=0;x<=rw;x++){
+    ctx.beginPath();ctx.moveTo(o.x+x*sc,o.y);ctx.lineTo(o.x+x*sc,o.y+rl*sc);ctx.stroke();
+  }
+  for(let y=0;y<=rl;y++){
+    ctx.beginPath();ctx.moveTo(o.x,o.y+y*sc);ctx.lineTo(o.x+rw*sc,o.y+y*sc);ctx.stroke();
+  }
+
+  // Calibration line overlay
+  if(calibPts.length>=1){
+    calibPts.forEach((p,i)=>{
+      ctx.beginPath();ctx.arc(p.cx,p.cy,6,0,Math.PI*2);
+      ctx.fillStyle='#ffdd44';ctx.strokeStyle='#000';ctx.lineWidth=1.5;
+      ctx.fill();ctx.stroke();
+      ctx.fillStyle='#ffdd44';ctx.font='bold 10px DM Mono,monospace';ctx.textAlign='left';
+      ctx.fillText(i===0?'A':'B',p.cx+8,p.cy-4);
+    });
+    if(calibPts.length===2){
+      ctx.beginPath();ctx.moveTo(calibPts[0].cx,calibPts[0].cy);
+      ctx.lineTo(calibPts[1].cx,calibPts[1].cy);
+      ctx.strokeStyle='#ffdd44';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+      ctx.stroke();ctx.setLineDash([]);
+      if(floorPixelScale){
+        const mx=(calibPts[0].cx+calibPts[1].cx)/2;
+        const my=(calibPts[0].cy+calibPts[1].cy)/2;
+        const pxDist=Math.sqrt((calibPts[1].cx-calibPts[0].cx)**2+(calibPts[1].cy-calibPts[0].cy)**2);
+        const mDist=(pxDist/floorPixelScale).toFixed(2);
+        ctx.fillStyle='rgba(0,0,0,.75)';ctx.fillRect(mx-30,my-16,62,18);
+        ctx.fillStyle='#ffdd44';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';
+        ctx.fillText(mDist+' m',mx,my-3);
+      }
+    }
+  }
+
+  // Calibration preview line while moving mouse
+  if(calibLine&&calibPts.length===1){
+    ctx.beginPath();ctx.moveTo(calibPts[0].cx,calibPts[0].cy);
+    ctx.lineTo(calibLine.cx,calibLine.cy);
+    ctx.strokeStyle='rgba(255,221,68,.5)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    ctx.stroke();ctx.setLineDash([]);
+  }
+
+  // Zones background
+  zones.forEach(z=>{
+    const hex=z.color, r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    ctx.fillStyle=`rgba(${r},${g},${b},0.05)`;
+    ctx.fillRect(o.x+z.x*sc,o.y+z.y*sc,z.w*sc,z.h*sc);
+  });
+
+  // Coverage heatmap
+  drawHeatmap(o,rw,rl,sc);
+
+  // Zone borders
+  zones.forEach(z=>{
+    const hex=z.color,r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    ctx.strokeStyle=`rgba(${r},${g},${b},0.7)`;
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([5,4]);
+    ctx.strokeRect(o.x+z.x*sc,o.y+z.y*sc,z.w*sc,z.h*sc);
+    ctx.setLineDash([]);
+    // Zone label
+    ctx.fillStyle=`rgba(${r},${g},${b},0.9)`;
+    ctx.font='bold 10px DM Mono,monospace';
+    ctx.textAlign='left';
+    ctx.fillText(z.name,o.x+z.x*sc+5,o.y+z.y*sc+14);
+  });
+
+  // Zone preview while drawing
+  if(zoneDrawing&&zonePt1&&zonePreview){
+    const x1=Math.min(zonePt1.x,zonePreview.x),y1=Math.min(zonePt1.y,zonePreview.y);
+    const x2=Math.max(zonePt1.x,zonePreview.x),y2=Math.max(zonePt1.y,zonePreview.y);
+    ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.strokeRect(o.x+x1*sc,o.y+y1*sc,(x2-x1)*sc,(y2-y1)*sc);
+    ctx.setLineDash([]);
+  }
+
+  // Room border
+  ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=1.5;
+  ctx.strokeRect(o.x,o.y,rw*sc,rl*sc);
+
+  // Dimension labels
+  ctx.fillStyle='rgba(255,255,255,.3)';ctx.font='10px DM Mono,monospace';ctx.textAlign='center';
+  ctx.fillText(rw+'m',o.x+rw*sc/2,o.y-7);
+  ctx.save();ctx.translate(o.x-10,o.y+rl*sc/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText(rl+'m',0,0);ctx.restore();
+
+  // Speakers
+  speakers.forEach((s,i)=>{
+    const sp=SPK[s.model];
+    const p=r2c(s.x,s.y);
+    const dir=s.dir*Math.PI/180;
+    const halfAngRad=sp.ang/2*Math.PI/180;
+    const effectiveH=Math.max(getRH()-1.5,0.5);
+    const coverageR=effectiveH*Math.tan(halfAngRad);
+    const sc=getScale();
+
+    if(sp.mount==='sub'){
+      // Subwoofer: vis kun et rundt ikon med SUB-tekst, ingen dekningssirkel
+      ctx.beginPath();ctx.arc(p.x,p.y,9,0,Math.PI*2);
+      ctx.fillStyle='#555';ctx.strokeStyle=sp.color;ctx.lineWidth=2;
+      ctx.fill();ctx.stroke();
+      ctx.fillStyle=sp.color;ctx.font='bold 7px DM Mono,monospace';ctx.textAlign='center';
+      ctx.fillText('SUB',p.x,p.y+2.5);
+      return; // skip normal drawing below
+    } else if(!sp.mount||sp.mount==='ceiling'||sp.mount==='pendant'){
+      // Show circle outline clipped to room boundaries
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(o.x, o.y, rw*sc, rl*sc);
+      ctx.clip();
+      ctx.beginPath();ctx.arc(p.x,p.y,coverageR*sc,0,Math.PI*2);
+      ctx.strokeStyle=sp.color+'88';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+      ctx.stroke();ctx.setLineDash([]);
+      ctx.restore();
+    } else {
+      // Directional arrow for wall/edge
+      ctx.strokeStyle=sp.color;ctx.lineWidth=1.5;ctx.setLineDash([3,3]);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+      ctx.lineTo(p.x+Math.cos(dir)*16,p.y+Math.sin(dir)*16);
+      ctx.stroke();ctx.setLineDash([]);
+    }
+
+    // Dot
+    const isSel=selSpk===i;
+    ctx.beginPath();ctx.arc(p.x,p.y,isSel?9:7,0,Math.PI*2);
+    ctx.fillStyle=isSel?'#fff':sp.color;ctx.strokeStyle=isSel?sp.color:'rgba(0,0,0,.5)';
+    ctx.lineWidth=isSel?2:1;ctx.fill();ctx.stroke();
+
+    ctx.fillStyle=isSel?sp.color:'#fff';
+    ctx.font='bold 8px DM Mono,monospace';ctx.textAlign='center';
+    ctx.fillText(i+1,p.x,p.y+3);
+
+    // Zone dot indicator
+    if(s.zone!==null){
+      const z=zones.find(zz=>zz.id===s.zone);
+      if(z){
+        ctx.beginPath();ctx.arc(p.x+8,p.y-8,3,0,Math.PI*2);
+        ctx.fillStyle=z.color;ctx.fill();
+      }
+    }
+  });
+}
+
+function drawHeatmap(o,rw,rl,sc){
+  if(!speakers.length) return;
+  // Clip all heatmap rendering strictly to room rectangle
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(o.x, o.y, rw*sc, rl*sc);
+  ctx.clip();
+  const res=4;
+  const cols=Math.ceil(rw*sc/res), rows=Math.ceil(rl*sc/res);
+  const rh=getRH();
+
+  for(let ci=0;ci<cols;ci++){
+    for(let ri=0;ri<rows;ri++){
+      const px=o.x+ci*res+res/2, py=o.y+ri*res+res/2;
+      const rx=(px-o.x)/sc, ry=(py-o.y)/sc;
+      if(rx<0||rx>rw||ry<0||ry>rl) continue;
+
+      let dbLin=-Infinity, contribs=0;
+
+      speakers.forEach(s=>{
+        const sp=SPK[s.model];if(sp.mount==='sub')return;
+        const dx=rx-s.x,dy=ry-s.y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<0.05) return;
+
+        // Coverage radius at ear height (1.5m) = (takhøyde - 1.5m) * tan(half_angle)
+        // Bose standard: listener height 1.5m (standing)
+        const LISTENER_H = 1.5;
+        const halfAngRad = sp.ang/2 * Math.PI/180;
+        const effectiveH = Math.max(rh - LISTENER_H, 0.5); // height from speaker to ear
+        const coverageR = effectiveH * Math.tan(halfAngRad);
+
+        let inCoverage = false;
+        let rolloff = 0;
+
+        if(!sp.mount||sp.mount==='ceiling'||sp.mount==='pendant'){
+          // Omnidirectional cone: circular coverage on floor
+          // Coverage degrades toward the edge of the circle
+          if(dist <= coverageR){
+            inCoverage = true;
+            rolloff = Math.pow(dist/coverageR, 2) * 6; // 0 dB center, -6 dB edge
+          }
+        } else if(sp.mount==='edge'){
+          // EdgeMax: semicircular from wall edge, directed by s.dir
+          // Coverage is a wide arc (ang degrees) from the mounting point
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          if(Math.abs(df)<=halfAngRad && dist<=coverageR*1.5){
+            inCoverage=true;
+            rolloff=Math.pow(Math.abs(df)/halfAngRad,1.5)*4+Math.pow(dist/(coverageR*1.5),2)*3;
+          }
+        } else {
+          // wall mount: directional sector (horizontal projection)
+          const dir=s.dir*Math.PI/180;
+          const at=Math.atan2(dy,dx);
+          let df=at-dir;
+          while(df>Math.PI)df-=2*Math.PI;
+          while(df<-Math.PI)df+=2*Math.PI;
+          const wallRange = sp.range;
+          if(Math.abs(df)<=halfAngRad && dist<=wallRange){
+            inCoverage=true;
+            rolloff=Math.pow(Math.abs(df)/halfAngRad,2)*6+Math.pow(dist/wallRange,2)*3;
+          }
+        }
+
+        if(!inCoverage) return;
+
+        const d3d=Math.sqrt(dist*dist+effectiveH*effectiveH);
+        const spl=sp.sens-20*Math.log10(Math.max(d3d,.5))-rolloff;
+        const lin=Math.pow(10,spl/10);
+        dbLin=dbLin===-Infinity?lin:dbLin+lin;
+        contribs++;
+      });
+
+      // Determine if point is inside any zone (for zone-specific rendering)
+      const inAnyZone = zones.length === 0 || zones.some(z => inZone(rx,ry,z));
+
+      if(dbLin===-Infinity){
+        if(inAnyZone){
+          ctx.fillStyle='rgba(200,60,60,.13)';
+          ctx.fillRect(px-res/2,py-res/2,res,res);
+        }
+        continue;
+      }
+
+      // Only render coverage where there are speakers assigned to the zone the point is in
+      if(zones.length > 0 && !inAnyZone) continue;
+
+      const db=10*Math.log10(dbLin);
+      let r,g,b,a;
+      if(contribs>1&&db>86){r=200;g=90; b=90; a=.72;}
+      else if(db>83)       {r=100;g=210;b=90; a=.68;}
+      else if(db>80)       {r=80; g=150;b=230;a=.52;}
+      else                 {r=80; g=80; b=120;a=.38;}
+      ctx.fillStyle=`rgba(${r},${g},${b},${a})`;
+      ctx.fillRect(px-res/2,py-res/2,res,res);
+    }
+  }
+  ctx.restore(); // end room clip
+}
+
+// ── CANVAS EVENTS ─────────────────────────────────────────────────────────────
+function getCanvasXY(e){
+  const rect=canvas.getBoundingClientRect();
+  return {cx:(e.clientX-rect.left)*(canvas.width/rect.width),
+          cy:(e.clientY-rect.top)*(canvas.height/rect.height)};
+}
+
+canvas.addEventListener('mousedown',e=>{
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+
+  if(mode==='calibrate'){
+    calibPts.push({cx,cy});
+    if(calibPts.length===2){
+      const pxDist=Math.sqrt((calibPts[1].cx-calibPts[0].cx)**2+(calibPts[1].cy-calibPts[0].cy)**2);
+      // Show input dialog
+      const known=parseFloat(prompt('Avstand mellom punkt A og B i meter:\n(Mål f.eks. en kjent vegg på plantegningen)', ''));
+      if(!isNaN(known)&&known>0){
+        floorPixelScale=pxDist/known;
+
+        if(floorImg){
+          // Calculate canvas pixels per meter using calibration
+          // The floor image is drawn at canvas size: rw*scale x rl*scale
+          // But we need to find pixels-per-meter in the CANVAS coordinate space
+          // canvasPxPerMeter = floorPixelScale (canvas px / real meter)
+
+          // Auto-calculate room dimensions from floor image aspect ratio + calibration
+          // floorImg is rendered to fill rW x rL in room coords
+          // Canvas pixels per room-meter = getScale()
+          // But calibration gives us canvas pixels per real meter directly
+          // So: 1 real meter = floorPixelScale canvas pixels
+          // Room width in real meters = canvas room width in pixels / floorPixelScale
+          const canvasRoomW = canvas.width - 88; // approx canvas room pixel width
+          const canvasRoomH = canvas.height - 88;
+          const imgAspect = floorImg.naturalWidth / floorImg.naturalHeight;
+          
+          // Use calibration to set room size based on image aspect + known scale
+          // The image is drawn as: width=rW*sc, height=rL*sc
+          // sc = min((canvas.width-88)/rW, (canvas.height-88)/rL)
+          // We know: floorPixelScale px = 1 meter in canvas coords
+          // So room width = (canvas room px width) / floorPixelScale
+          // But canvas room px = rW * sc, and sc depends on rW/rL...
+          // Simpler: use the image native resolution
+          // floorImg natural pixels / floorPixelScale_in_image_coords
+          // Image is rendered at scale 3.0 for PDF, so native px = 3x real
+          // For PNG: native px = screen px at upload resolution
+
+          // BEST APPROACH: use the two calibration points directly
+          // pxDist = distance in canvas pixels between A and B = known meters
+          // So: canvasPxPerMeter = pxDist / known
+          // Room width in canvas px = canvas.width - 2*pad (approx)
+          // But we need actual room pixel extents
+          // Use: roomWidth = (image_width_in_canvas_px) / canvasPxPerMeter
+          
+          // The image is drawn at: drawImage(floorImg, o.x, o.y, rw*sc, rl*sc)
+          // So image canvas width = rw*sc, image canvas height = rl*sc
+          // We need to figure out rw*sc from canvas layout
+          // Since we don't know exact image extents without knowing rw,
+          // use aspect ratio of the image + one known dimension
+
+          // Calculate: the calibration line is pxDist pixels = known meters
+          // So 1 meter = pxDist/known canvas pixels
+          // Image is drawn to fill rW*sc x rL*sc
+          // Image aspect = naturalWidth/naturalHeight
+          // If image fills full canvas room area:
+          // pxPerMeter: canvas pixels per real meter
+          const pxPerMeter = pxDist / known;
+
+          // Ask user for total room dimensions directly
+          // This avoids pixel-calculation errors from image margins/borders
+          const rWinput = parseFloat(prompt(
+            `Kalibrert: ${known}m = ${pxDist.toFixed(0)}px (${pxPerMeter.toFixed(1)} px/m)\n\nOppgi total BREDDE på rommet/bygget i meter:`,
+            getRW()
+          ));
+          if(isNaN(rWinput)||rWinput<=0){ calibPts=[];redraw();return; }
+
+          const rLinput = parseFloat(prompt(
+            `Oppgi total DYBDE på rommet/bygget i meter:`,
+            getRL()
+          ));
+          if(isNaN(rLinput)||rLinput<=0){ calibPts=[];redraw();return; }
+
+          const newRW = rWinput;
+          const newRL = rLinput;
+
+          document.getElementById('rW').value = newRW.toFixed(2);
+          document.getElementById('rL').value = newRL.toFixed(2);
+          
+          document.getElementById('rW').value = newRW.toFixed(2);
+          document.getElementById('rL').value = newRL.toFixed(2);
+          
+          // Clear existing speakers/zones since scale changed
+          if(speakers.length > 0 || zones.length > 0){
+            if(confirm(`Romstørrelse satt til ${newRW.toFixed(1)}×${newRL.toFixed(1)}m.\nNullstill eksisterende høyttalere og soner?`)){
+              speakers=[]; zones=[]; updateSpkList(); updateZoneList();
+            }
+          }
+
+          const status=document.getElementById('floorStatus');
+          status.textContent=`Kalibrert: ${pxPerMeter.toFixed(1)} px/m · Rom: ${newRW.toFixed(1)}×${newRL.toFixed(1)}m`;
+          const cs=document.getElementById('calibStatus');
+          if(cs){ cs.textContent=`✓ ${known}m ref · Rom ${newRW.toFixed(1)}×${newRL.toFixed(1)}m`; cs.style.color='var(--success)'; }
+          const imgW_m = (floorImg.naturalWidth / (floorImg.naturalWidth/getRW()*sc) ) ;
+          hint(`✓ Kalibrert! ${known}m = ${pxDist.toFixed(0)}px. Juster romstørrelse om nødvendig.`);
+        }
+        setMode('place');
+      } else {
+        calibPts.pop(); // remove second point if cancelled
+      }
+    }
+    redraw();
+    return;
+  }
+  if(mode==='zone'){
+    zoneDrawing=true; zonePt1={x:rp.x,y:rp.y}; zonePreview={x:rp.x,y:rp.y};
+    return;
+  }
+  if(mode==='select'){
+    let found=null;
+    speakers.forEach((s,i)=>{
+      if(Math.sqrt((s.x-rp.x)**2+(s.y-rp.y)**2)<0.8) found=i;
+    });
+    if(found!==null){
+      dragSpk=found; selSpk=found;
+      const p=r2c(speakers[found].x,speakers[found].y);
+      dragOff={x:cx-p.x,y:cy-p.y};
+      updateSpkList();
+    }
+    return;
+  }
+  if(mode==='pan'){ panStart={x:e.clientX-panX,y:e.clientY-panY}; return; }
+});
+
+canvas.addEventListener('mousemove',e=>{
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+
+  if(mode==='calibrate'&&calibPts.length===1){ calibLine={cx,cy}; redraw(); return; }
+  if(zoneDrawing&&zonePt1){ zonePreview={x:rp.x,y:rp.y}; redraw(); return; }
+  if(dragSpk!==null){
+    const nrp=c2r(cx-dragOff.x,cy-dragOff.y);
+    speakers[dragSpk].x=clamp(nrp.x,0,getRW());
+    speakers[dragSpk].y=clamp(nrp.y,0,getRL());
+    updateSpkList();updateZoneList();redraw();
+    return;
+  }
+  if(panStart){ panX=e.clientX-panStart.x;panY=e.clientY-panStart.y;redraw();return; }
+
+  if(mode==='place'&&selModel){
+    if(rp.x>=0&&rp.x<=getRW()&&rp.y>=0&&rp.y<=getRL())
+      hint(`${SPK[selModel].name} → (${rp.x.toFixed(2)}, ${rp.y.toFixed(2)}) m`);
+  }
+});
+
+canvas.addEventListener('mouseup',e=>{
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+
+  if(zoneDrawing&&zonePt1){
+    zoneDrawing=false;
+    const x1=Math.min(zonePt1.x,rp.x),y1=Math.min(zonePt1.y,rp.y);
+    const x2=Math.max(zonePt1.x,rp.x),y2=Math.max(zonePt1.y,rp.y);
+    if((x2-x1)>0.5&&(y2-y1)>0.5){
+      zones.push({id:zoneCounter++,name:'Sone '+(zones.length+1),
+        x:x1,y:y1,w:x2-x1,h:y2-y1,
+        color:ZONE_COLORS[zones.length%ZONE_COLORS.length]});
+      updateZoneList();
+    }
+    zonePt1=null;zonePreview=null;redraw();
+    return;
+  }
+  dragSpk=null; panStart=null;
+});
+
+canvas.addEventListener('click',e=>{
+  if(mode!=='place'||!selModel) return;
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+  if(rp.x<0||rp.x>getRW()||rp.y<0||rp.y>getRL()) return;
+
+  // Auto-detect zone
+  const autoZone=zones.find(z=>inZone(rp.x,rp.y,z));
+  // Default direction toward center
+  const dir=Math.atan2(getRL()/2-rp.y,getRW()/2-rp.x)*180/Math.PI;
+
+  speakers.push({id:spkCounter++,model:selModel,x:rp.x,y:rp.y,dir,zone:autoZone?autoZone.id:null});
+  updateSpkList();updateZoneList();redraw();
+});
+
+canvas.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  if(selSpk===null) return;
+  const {cx,cy}=getCanvasXY(e);
+  const rp=c2r(cx,cy);
+  speakers[selSpk].dir=Math.atan2(rp.y-speakers[selSpk].y,rp.x-speakers[selSpk].x)*180/Math.PI;
+  updateSpkList();redraw();
+});
+
+// ── FLOOR PLAN ────────────────────────────────────────────────────────────────
+function loadFloor(e){
+  const file=e.target.files[0]; if(!file) return;
+  const status=document.getElementById('floorStatus');
+
+  if(file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf')){
+    status.textContent='Laster PDF...';
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      try{
+        if(typeof pdfjsLib==='undefined') throw new Error('PDF.js ikke tilgjengelig — last opp som PNG/JPG i stedet');
+        // Disable worker to avoid cross-origin issues when running locally
+        pdfjsLib.GlobalWorkerOptions.workerSrc='';
+        const loadTask=pdfjsLib.getDocument({data:ev.target.result, disableWorker:true, disableRange:true, disableStream:true});
+        const pdf=await loadTask.promise;
+        const page=await pdf.getPage(1);
+        // Adaptive scale: target max 4000px on longest side for good quality
+        const rawVp=page.getViewport({scale:1.0});
+        const maxPx=4000;
+        const adaptScale=Math.min(maxPx/Math.max(rawVp.width,rawVp.height), 4.0);
+        const viewport=page.getViewport({scale:adaptScale});
+        const offCanvas=document.createElement('canvas');
+        offCanvas.width=viewport.width; offCanvas.height=viewport.height;
+        await page.render({canvasContext:offCanvas.getContext('2d'),viewport}).promise;
+        floorImg=new Image();
+        floorImg.onload=()=>{status.textContent=`PDF lastet · ${viewport.width}×${viewport.height}px · skala ${adaptScale.toFixed(1)}x`;document.getElementById('calibBtn').style.display='inline-block';document.getElementById('mCalibrate').style.display='inline-block';document.getElementById('calibSection').style.display='block';redraw();};
+        floorImg.src=offCanvas.toDataURL('image/png');
+      }catch(err){
+        console.error('PDF load error:', err);
+        // Try alternative approach: use object URL directly for simpler PDFs
+        status.textContent='⚠ PDF laster ikke direkte. Ta skjermbilde og last opp som PNG.';
+        status.style.color='var(--danger)';
+        document.getElementById('calibSection').style.display='block';
+        // Show helper button
+        const helpBtn=document.createElement('button');
+        helpBtn.className='btn';
+        helpBtn.style.marginTop='6px';
+        helpBtn.textContent='Last opp PNG/JPG i stedet';
+        helpBtn.onclick=()=>{ document.getElementById('pdfInput').accept='image/*'; document.getElementById('pdfInput').click(); };
+        status.parentNode.appendChild(helpBtn);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    floorImg=new Image();
+    floorImg.onload=()=>{status.textContent=`Bilde lastet (${floorImg.width}×${floorImg.height}px)`;document.getElementById('calibBtn').style.display='inline-block';document.getElementById('mCalibrate').style.display='inline-block';document.getElementById('calibSection').style.display='block';redraw();};
+    floorImg.src=URL.createObjectURL(file);
+  }
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────────
+function exportReport(){
+  let txt=`BOSE DEKNINGSRAPPORT\n${'═'.repeat(44)}\n`;
+  txt+=`Rom: ${getRW()}×${getRL()}m · Takhøyde: ${getRH()}m\n`;
+  txt+=`Høyttalere totalt: ${speakers.length} · Soner: ${zones.length}\n\n`;
+
+  zones.forEach(z=>{
+    const sp=speakers.filter(s=>s.zone===z.id);
+    const st=calcZoneStats(z);
+    txt+=`SONE: ${z.name}\n${'─'.repeat(30)}\n`;
+    txt+=`  Størrelse: ${z.w.toFixed(1)}×${z.h.toFixed(1)}m\n`;
+    txt+=`  Dekning: ${st.cov}% · Dødpunkt: ${st.dead}%\n`;
+    txt+=`  Høyttalere:\n`;
+    sp.forEach((s,i)=>{const m=SPK[s.model];txt+=`    ${i+1}. ${m.name} @ (${s.x.toFixed(2)},${s.y.toFixed(2)})m · ${Math.round(s.dir)}° · ${m.pwr}W\n`;});
+    txt+='\n';
+  });
+
+  const sWithoutZone=speakers.filter(s=>s.zone===null);
+  if(sWithoutZone.length){
+    txt+=`UTEN SONE:\n`;
+    sWithoutZone.forEach((s,i)=>{const m=SPK[s.model];txt+=`  ${i+1}. ${m.name} @ (${s.x.toFixed(2)},${s.y.toFixed(2)})m\n`;});
+    txt+='\n';
+  }
+
+  const totalPwr=speakers.reduce((s,x)=>s+SPK[x.model].pwr,0);
+  const amp=AMPS.find(a=>a.ch>=speakers.length&&a.zones>=zones.length&&a.wCh*a.ch>=totalPwr*1.2)||AMPS[AMPS.length-1];
+  const proc=PROCS.find(p=>p.outs>=zones.length)||PROCS[3];
+  txt+=`ANBEFALT UTSTYR\n${'─'.repeat(30)}\n`;
+  txt+=`  Forsterker: ${amp.name}\n  ${amp.desc}\n\n`;
+  txt+=`  Prosessor: ${proc.name}\n  ${proc.desc}\n`;
+
+  const a=document.createElement('a');
+  a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(txt);
+  a.download='bose_dekningsrapport.txt';a.click();
+}
+
+redraw();
+</script>
+</body>
+</html>
